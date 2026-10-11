@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PDF-Tutor",
+  "mainBinaryName": "pdf-tutor",
+  "version": "4.0.0",
+  "identifier": "io.github.pdftutor",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "PDF-Tutor",
+    "shortDescription": "PDF-Reader mit Fragen an Claude",
+    "copyright": "MIT OR Apache-2.0",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "resources/hinweise.vorlage.txt": "hinweise.vorlage.txt"
+    },
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "German"
+        ],
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYyQjgzRjQ2NDNFNjU1QUEKUldTcVZlWkRSais0WWovY0J2b0l2S1ZtSzg5REhZdnhiQ1oybTBkRHRqRzZldjVFOU9CaDU4dTAK",
+      "endpoints": [
+        "https://github.com/Jonas5356/PDF-Tutor/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

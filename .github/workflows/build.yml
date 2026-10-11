@@ -1,0 +1,68 @@
+# Baut den Windows-Installer.
+# - Bei jedem Push auf main und manuell (Actions → "Windows-Installer bauen" → Run workflow):
+#   Installer als Download unter "Artifacts".
+# - Tag "v*" pushen (z. B. v4.0.0): zusätzlich ein Release-Entwurf mit Installer und Update-Dateien.
+#   Dafür müssen die Secrets TAURI_SIGNING_PRIVATE_KEY und TAURI_SIGNING_PRIVATE_KEY_PASSWORD gesetzt sein.
+name: Windows-Installer bauen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["**.md"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Ohne Signaturschlüssel keine Update-Dateien erzeugen
+        if: env.HAS_SIGNING_KEY != 'true'
+        shell: pwsh
+        run: |
+          $c = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $c.bundle.createUpdaterArtifacts = $false
+          $c | ConvertTo-Json -Depth 20 | Set-Content src-tauri/tauri.conf.json -Encoding utf8
+
+      - name: Tag ohne Signaturschlüssel abbrechen
+        if: startsWith(github.ref, 'refs/tags/') && env.HAS_SIGNING_KEY != 'true'
+        shell: pwsh
+        run: |
+          Write-Error "Für ein Release fehlen die Secrets TAURI_SIGNING_PRIVATE_KEY und TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
+          exit 1
+
+      - name: Bauen (und bei Tags Release-Entwurf anlegen)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: "PDF-Tutor __VERSION__"
+          releaseBody: "Installer: PDF-Tutor_*_x64-setup.exe herunterladen und ausführen."
+          releaseDraft: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Tutor-Setup
+          path: src-tauri/target/release/bundle/nsis/*.exe

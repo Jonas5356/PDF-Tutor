@@ -1,0 +1,15 @@
+{
+  "name": "pdf-tutor",
+  "private": true,
+  "version": "4.0.0",
+  "description": "PDF-Reader zum Durcharbeiten von Fachliteratur mit Fragen an Claude",
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.2"
+  }
+}

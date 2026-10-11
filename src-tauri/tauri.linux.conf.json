@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "targets": ["deb"],
+    "resources": {
+      "resources/hinweise.vorlage.txt": "hinweise.vorlage.txt",
+      "resources/libpdfium.so": "libpdfium.so"
+    }
+  }
+}

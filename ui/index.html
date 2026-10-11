@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF-Tutor</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="home.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <img src="icon.png" alt="" width="30" height="30">
+    <span class="wordmark">PDF-Tutor</span>
+  </div>
+  <div class="top-actions">
+    <input id="search" type="search" placeholder="Dokument suchen" autocomplete="off" aria-label="Dokument suchen">
+    <button id="openBtn" class="btn primary">PDF öffnen …</button>
+    <button id="folderBtn" class="btn">Ordner hinzufügen …</button>
+    <button id="settingsBtn" class="btn">Einstellungen</button>
+  </div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+<div id="updateBanner" class="banner info" hidden><span class="txt"></span> <button id="updateNow" class="btn primary">Jetzt aktualisieren</button></div>
+
+<main id="main">
+  <section id="recentSection" class="shelf-section" hidden>
+    <h2 class="shelf-title">Weiterlesen</h2>
+    <div id="recent" class="shelf"></div>
+  </section>
+  <div id="folders"></div>
+  <section id="empty" class="empty" hidden>
+    <h2>Deine Bibliothek ist noch leer</h2>
+    <p>Öffne ein PDF oder füge einen Ordner hinzu, etwa den mit deinen Vorlesungsunterlagen. Alle PDFs darin erscheinen dann hier.</p>
+    <div class="empty-actions">
+      <button class="btn primary" data-act="open">PDF öffnen …</button>
+      <button class="btn" data-act="folder">Ordner hinzufügen …</button>
+    </div>
+  </section>
+  <p id="noResults" class="no-results" hidden>Kein Dokument passt zu dieser Suche.</p>
+</main>
+
+<div id="menu" class="menu" role="menu" hidden></div>
+
+<dialog id="settings">
+  <form method="dialog" class="settings-form">
+    <h2>Einstellungen</h2>
+    <label class="field">
+      <span class="field-label">Hinweise an Claude</span>
+      <span class="field-help">Was Claude über dich wissen soll und wie die Antworten aussehen sollen. Gilt für alle Dokumente.</span>
+      <textarea id="setHinweise" rows="8"></textarea>
+    </label>
+    <label class="field">
+      <span class="field-label">Volltext bis</span>
+      <span class="field-help">Ist ein Dokument kleiner, bekommt Claude bei jeder Frage den ganzen Text mit. Größere Dokumente werden durchsucht. Etwa 30.000 Tokens entsprechen 50–60 Buchseiten oder einem langen Foliensatz.</span>
+      <span class="inline"><input id="setGrenze" type="number" min="0" step="1000"> Tokens</span>
+    </label>
+    <label class="field">
+      <span class="field-label">Dein Name</span>
+      <span class="field-help">Steht als Autor bei deinen Markierungen und Kommentaren im PDF. Andere Programme wie Acrobat zeigen ihn an.</span>
+      <input id="setAutor" type="text" class="text-input" autocomplete="off">
+    </label>
+    <label class="field check">
+      <input id="setBackup" type="checkbox">
+      <span><span class="field-label">Sicherheitskopie</span>
+      <span class="field-help">Bevor der PDF-Tutor ein PDF zum ersten Mal verändert, legt er eine Kopie im Datenordner ab.</span></span>
+    </label>
+    <div class="settings-links">
+      <button type="button" class="link-btn" id="openData">Datenordner öffnen</button>
+      <button type="button" class="link-btn" id="openLog">Protokoll öffnen</button>
+      <button type="button" class="link-btn" id="checkUpdate">Nach Updates suchen</button>
+      <span id="versionInfo" class="muted"></span>
+    </div>
+    <div id="updateInfo" class="field-help"></div>
+    <div class="dialog-actions">
+      <button id="saveSettings" value="save" class="btn primary">Speichern</button>
+      <button value="cancel" class="btn">Abbrechen</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="bridge.js"></script>
+<script src="home.js"></script>
+</body>
+</html>

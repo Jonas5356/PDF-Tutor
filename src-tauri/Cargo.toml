@@ -1,0 +1,34 @@
+[package]
+name = "pdf-tutor"
+version = "4.0.0"
+description = "PDF-Reader zum Durcharbeiten von Fachliteratur mit Fragen an Claude"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+lopdf = "0.45"
+pdfium-render = "0.9.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+sha1_smol = "1"
+walkdir = "2"
+which = "7"
+wait-timeout = "0.2"
+uuid = { version = "1", features = ["v4"] }
+percent-encoding = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

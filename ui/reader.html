@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF-Tutor</title>
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="icon.png">
+<script src="vendor/katex/katex.min.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script src="bridge.js"></script>
+</head>
+<body>
+<header id="toolbar">
+  <div class="tb-left">
+    <a id="homeBtn" class="tb-btn home-btn" href="index.html" title="Zur Bibliothek">‹ Bibliothek</a>
+    <span id="bookTitle" class="book-title">Lade …</span>
+  </div>
+  <div class="tb-center">
+    <button id="prevPage" class="tb-btn" title="Vorherige Seite">‹</button>
+    <label class="page-nav">Seite
+      <input id="pageInput" type="text" inputmode="numeric" autocomplete="off">
+      <span id="pageCount">/ –</span>
+    </label>
+    <span id="pageLabel" class="muted"></span>
+    <button id="nextPage" class="tb-btn" title="Nächste Seite">›</button>
+    <span class="sep"></span>
+    <button id="zoomOut" class="tb-btn" title="Verkleinern">−</button>
+    <span id="zoomVal" class="zoom-val">100 %</span>
+    <button id="zoomIn" class="tb-btn" title="Vergrößern">+</button>
+    <button id="zoomFit" class="tb-btn text" title="Auf Breite einpassen">Breite</button>
+  </div>
+  <div class="tb-right">
+    <span id="docStatus" class="muted doc-status"></span>
+    <select id="modeSelect" class="tb-select" title="Wie viel vom Dokument Claude bei einer Frage mitbekommt">
+      <option value="auto">Kontext: automatisch</option>
+      <option value="volltext">Kontext: Volltext</option>
+      <option value="suche">Kontext: Suche</option>
+    </select>
+    <select id="modelSelect" class="tb-select" title="Modell für neue Fragen"></select>
+    <button id="collapseAll" class="tb-btn text" title="Alle Notizen einklappen">Einklappen</button>
+  </div>
+</header>
+<div id="banner" class="banner" hidden></div>
+<main id="scroller">
+  <div id="content">
+    <div id="pages"></div>
+    <aside id="notes">
+      <div id="notesEmpty" class="notes-empty">Markiere eine Stelle im Text und klicke auf <b>Frage stellen</b>.</div>
+    </aside>
+  </div>
+</main>
+<button id="askBtn" class="ask-btn" hidden>Frage stellen</button>
+<script type="module" src="app.js"></script>
+</body>
+</html>
