@@ -1,12 +1,19 @@
 # Baut den Windows-Installer.
 # - Bei jedem Push auf main und manuell (Actions → "Windows-Installer bauen" → Run workflow):
 #   Installer als Download unter "Artifacts".
-# - Tag "v*" pushen (z. B. v4.0.0): zusätzlich ein Release-Entwurf mit Installer und Update-Dateien.
+# - Release: Actions → "Windows-Installer bauen" → Run workflow → Häkchen bei "Release-Entwurf anlegen".
+#   Legt einen Release-Entwurf v<Version aus tauri.conf.json> mit Installer und Update-Dateien an;
+#   das Tag entsteht beim Veröffentlichen des Entwurfs. Alternativ ein Tag "v*" pushen.
 #   Dafür müssen die Secrets TAURI_SIGNING_PRIVATE_KEY und TAURI_SIGNING_PRIVATE_KEY_PASSWORD gesetzt sein.
 name: Windows-Installer bauen
 
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Release-Entwurf anlegen"
+        type: boolean
+        default: false
   push:
     branches: [main]
     tags: ["v*"]
@@ -19,6 +26,7 @@ jobs:
       contents: write
     env:
       HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      MAKE_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || inputs.release == true }}
     steps:
       - uses: actions/checkout@v5
 
@@ -43,8 +51,8 @@ jobs:
           $c.bundle.createUpdaterArtifacts = $false
           $c | ConvertTo-Json -Depth 20 | Set-Content src-tauri/tauri.conf.json -Encoding utf8
 
-      - name: Tag ohne Signaturschlüssel abbrechen
-        if: startsWith(github.ref, 'refs/tags/') && env.HAS_SIGNING_KEY != 'true'
+      - name: Release ohne Signaturschlüssel abbrechen
+        if: env.MAKE_RELEASE == 'true' && env.HAS_SIGNING_KEY != 'true'
         shell: pwsh
         run: |
           Write-Error "Für ein Release fehlen die Secrets TAURI_SIGNING_PRIVATE_KEY und TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
@@ -63,12 +71,12 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "TAURI_SIGNING_PRIVATE_KEY=$k"
           Add-Content -Path $env:GITHUB_ENV -Value "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$p"
 
-      - name: Bauen (und bei Tags Release-Entwurf anlegen)
+      - name: Bauen (und bei Releases den Entwurf anlegen)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          tagName: ${{ (startsWith(github.ref, 'refs/tags/') && github.ref_name) || (inputs.release == true && 'v__VERSION__') || '' }}
           releaseName: "PDF-Tutor __VERSION__"
           releaseBody: "Installer: PDF-Tutor_*_x64-setup.exe herunterladen und ausführen."
           releaseDraft: true

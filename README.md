@@ -47,7 +47,7 @@ npm ci
 npx tauri build
 ```
 
-Unter Windows erledigt `build_windows.bat` dasselbe per Doppelklick. Der Installer liegt danach in `src-tauri/target/release/bundle/nsis/`. Bei jedem Tag `v*` baut GitHub Actions den Installer automatisch (siehe `.github/workflows/build.yml`).
+Unter Windows erledigt `build_windows.bat` dasselbe per Doppelklick. Der Installer liegt danach in `src-tauri/target/release/bundle/nsis/`. GitHub Actions baut den Installer bei jedem Push automatisch. Ein Release entsteht über Actions → „Windows-Installer bauen“ → *Run workflow* mit Häkchen bei „Release-Entwurf anlegen“ (siehe `.github/workflows/build.yml`).
 
 Aufbau des Codes: siehe [CLAUDE.md](CLAUDE.md).
 
