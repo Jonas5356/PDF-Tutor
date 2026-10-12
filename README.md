@@ -66,9 +66,7 @@ Licensed under either the [MIT license](LICENSE-MIT) or the [Apache License 2.0]
 
 ## Code signing policy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
-*Status: the application with SignPath Foundation is in progress. Until it is approved, releases are not signed.*
+Releases are currently not code-signed (see [Installation](#installation)). If code signing is introduced, it will be free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/), and the following policy applies.
 
 - Committers and reviewers: [Jonas Reitbauer (@Jonas5356)](https://github.com/Jonas5356)
 - Approvers: [Jonas Reitbauer (@Jonas5356)](https://github.com/Jonas5356)
