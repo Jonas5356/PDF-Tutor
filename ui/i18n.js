@@ -47,6 +47,8 @@
     "Open data folder": "Datenordner öffnen",
     "Open log file": "Protokoll öffnen",
     "Check for updates": "Nach Updates suchen",
+    "Check for updates automatically": "Automatisch nach Updates suchen",
+    "About every 6 hours PDF-Tutor downloads a small version file from GitHub. No information about you or your documents is sent. Updates are only installed when you confirm.": "Etwa alle 6 Stunden lädt der PDF-Tutor eine kleine Versionsdatei von GitHub. Dabei werden keine Daten über dich oder deine Dokumente übertragen. Installiert wird ein Update erst, wenn du es bestätigst.",
     "today, {time}": "heute, {time}",
     "yesterday, {time}": "gestern, {time}",
     "{n} days ago": "vor {n} Tagen",

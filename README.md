@@ -38,7 +38,7 @@ To uninstall, use Windows Settings → Apps → PDF-Tutor. Your PDFs and the com
 
 - No telemetry, no servers of our own, no user accounts.
 - **Questions to Claude** are only sent when you ask one. Claude Code then transfers the question, the highlighted passage, page images and page texts of the document to Anthropic under the terms of your Claude account ([Anthropic Privacy Policy](https://www.anthropic.com/legal/privacy)).
-- **Update check:** about every 6 hours (and when you click "Check for updates"), PDF-Tutor downloads a small version file (`latest.json`) from this project's GitHub releases. No information about you, your documents or your notes is sent; GitHub only sees an ordinary download request ([GitHub Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)). Updates are only installed when you click "Update now".
+- **Update check:** about every 6 hours (and when you click "Check for updates"), PDF-Tutor downloads a small version file (`latest.json`) from this project's GitHub releases. No information about you, your documents or your notes is sent; GitHub only sees an ordinary download request ([GitHub Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)). Updates are only installed when you click "Update now". The automatic check can be turned off in the settings ("Check for updates automatically").
 - **Links** in Claude's answers open in your web browser only when you click them.
 - Page images and texts prepared for Claude, the library and the settings are stored locally in `%LOCALAPPDATA%\PDF-Tutor-Daten`.
 
@@ -75,7 +75,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 
 Only binaries built by GitHub Actions from the source code in this repository are signed ([build workflow](.github/workflows/build.yml)). Every signing request is approved manually.
 
-**Privacy policy:** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with the exception of the update check described under [Privacy](#privacy), which only downloads a version file and sends no information about the user. Questions to Claude are sent through Claude Code to Anthropic only when the user asks them ([Anthropic Privacy Policy](https://www.anthropic.com/legal/privacy)).
+**Privacy policy:** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with the exception of the automatic update check described under [Privacy](#privacy), which only downloads a version file, sends no information about the user and can be turned off in the settings. Questions to Claude are sent through Claude Code to Anthropic only when the user asks them ([Anthropic Privacy Policy](https://www.anthropic.com/legal/privacy)).
 
 **System changes:** The installer installs PDF-Tutor for the current user (no administrator rights) and adds PDF-Tutor to the "Open with" list for PDF files. It does not change the default PDF program. The uninstaller removes the program and these entries.
 

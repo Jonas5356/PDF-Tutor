@@ -22,11 +22,17 @@ use std::sync::Arc;
 use tauri::http::Response;
 use tauri::Manager;
 
-fn pdf_arg(args: &[String]) -> Option<PathBuf> {
+/// PDF-Datei aus den Startargumenten; relative Pfade gelten relativ zu `cwd`
+/// (beim zweiten Programmstart ist das das Arbeitsverzeichnis des neuen Aufrufs).
+fn pdf_arg(args: &[String], cwd: Option<&Path>) -> Option<PathBuf> {
     args.iter()
         .skip(1)
-        .find(|a| a.to_lowercase().ends_with(".pdf") && Path::new(a).is_file())
-        .map(PathBuf::from)
+        .filter(|a| a.to_lowercase().ends_with(".pdf"))
+        .map(|a| match cwd {
+            Some(c) if Path::new(a).is_relative() => c.join(a),
+            _ => PathBuf::from(a),
+        })
+        .find(|p| p.is_file())
 }
 
 fn main() {
@@ -46,7 +52,7 @@ fn main() {
 
     let result = tauri::Builder::default()
         // Zweiter Programmstart: vorhandenes Programm aktivieren bzw. das PDF darin öffnen
-        .plugin(tauri_plugin_single_instance::init(move |app, argv, _cwd| match pdf_arg(&argv) {
+        .plugin(tauri_plugin_single_instance::init(move |app, argv, cwd| match pdf_arg(&argv, Some(Path::new(&cwd))) {
             Some(p) => {
                 let id = ctx_single.lib.ensure(&p);
                 let _ = windows::open(app, &format!("reader.html?id={id}"));
@@ -91,7 +97,7 @@ fn main() {
             let tpl = dirs.iter().map(|d| d.join(tpl_name)).find(|p| p.exists());
             settings::ensure_hinweise(&ctx_setup.paths, tpl);
             let args: Vec<String> = std::env::args().collect();
-            let url = match pdf_arg(&args) {
+            let url = match pdf_arg(&args, None) {
                 Some(p) => format!("reader.html?id={}", ctx_setup.lib.ensure(&p)),
                 None => "index.html".into(),
             };

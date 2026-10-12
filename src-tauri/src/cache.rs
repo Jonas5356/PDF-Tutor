@@ -113,7 +113,7 @@ impl PageCache {
     }
 
     pub fn label(&self, p: u32) -> String {
-        let l = self.labels.get(p as usize - 1).cloned().unwrap_or_default();
+        let l = self.labels.get((p as usize).wrapping_sub(1)).cloned().unwrap_or_default();
         if l.is_empty() {
             p.to_string()
         } else {
@@ -203,7 +203,7 @@ impl PageCache {
             let s = n.to_string();
             let mut out = String::new();
             for (i, c) in s.chars().enumerate() {
-                if i > 0 && (s.len() - i) % 3 == 0 {
+                if i > 0 && (s.len() - i).is_multiple_of(3) {
                     out.push(',');
                 }
                 out.push(c);

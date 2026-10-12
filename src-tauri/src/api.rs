@@ -119,7 +119,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                     .collect();
                 let kind = match body["kind"].as_str() {
                     None => Kind::Highlight,
-                    Some(k) => Kind::from_name(k).filter(|k| *k != Kind::Note).ok_or_else(|| bad("Unbekannte Art"))?,
+                    Some(k) => Kind::from_name(k).filter(|k| *k != Kind::Note).ok_or_else(|| bad(tx("Unknown kind", "Unbekannte Art")))?,
                 };
                 let color = color_of(body).unwrap_or(DEFAULT_COLOR);
                 Ok(doc.create_note(ctx, page, kind, rects, color, s(body, "text"), s(body, "comment"), s(body, "question"))?)
@@ -133,7 +133,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             "notes/style" => {
                 let kind = match body["kind"].as_str() {
                     None => None,
-                    Some(k) => Some(Kind::from_name(k).ok_or_else(|| bad("Unbekannte Art"))?),
+                    Some(k) => Some(Kind::from_name(k).ok_or_else(|| bad(tx("Unknown kind", "Unbekannte Art")))?),
                 };
                 Ok(doc.restyle(ctx, s(body, "id"), kind, color_of(body))?)
             }
@@ -201,6 +201,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             "dataDir": ctx.paths.data.to_string_lossy(),
             "updaterConfigured": updater_configured(app),
             "lang": crate::i18n::lang(),
+            "autoUpdate": ctx.settings.read().unwrap().auto_update,
         })),
         "/api/library" => Ok(ctx.lib.listing()),
         "/api/library/open" => {
@@ -245,6 +246,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 "autor": st.autor, "autorStandard": st.author(),
                 "sicherheitskopie": st.sicherheitskopie,
                 "sprache": crate::i18n::lang(),
+                "autoUpdate": st.auto_update,
                 "dataDir": ctx.paths.data.to_string_lossy(), "logFile": ctx.paths.log.to_string_lossy(),
             }))
         }
@@ -261,6 +263,9 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             }
             if let Some(b) = body["sicherheitskopie"].as_bool() {
                 st.sicherheitskopie = b;
+            }
+            if let Some(b) = body["autoUpdate"].as_bool() {
+                st.auto_update = b;
             }
             let mut lang_changed = false;
             if let Some(l) = body["sprache"].as_str().and_then(crate::i18n::normalize) {
@@ -308,7 +313,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
         "/api/open-url" => {
             let url = s(body, "url");
             if !(url.starts_with("https://") || url.starts_with("http://")) {
-                return Err(bad("nur Webadressen"));
+                return Err(bad(tx("Only web addresses can be opened", "Nur Webadressen können geöffnet werden")));
             }
             app.opener().open_url(url, None::<&str>).map_err(|e| bad(e.to_string()))?;
             Ok(json!({"ok": true}))
@@ -336,7 +341,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             Ok(json!({"docs": docs}))
         }
         "/api/organize/save" => {
-            let ids: Vec<String> = body["sources"].as_array().ok_or_else(|| bad("Quellen fehlen"))?.iter().filter_map(|x| x.as_str().map(String::from)).collect();
+            let ids: Vec<String> = body["sources"].as_array().ok_or_else(|| bad(tx("Sources missing", "Quellen fehlen")))?.iter().filter_map(|x| x.as_str().map(String::from)).collect();
             let mut src_paths = vec![];
             for id in &ids {
                 let e = ctx.lib.get(id).ok_or_else(|| bad(tx("A source document is no longer in the library.", "Ein Quelldokument ist nicht mehr in der Bibliothek.")))?;
@@ -344,7 +349,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             }
             let spec: Vec<crate::pdfium_host::PageSpec> = body["pages"]
                 .as_array()
-                .ok_or_else(|| bad("Seiten fehlen"))?
+                .ok_or_else(|| bad(tx("Pages missing", "Seiten fehlen")))?
                 .iter()
                 .map(|p| crate::pdfium_host::PageSpec {
                     src: p["src"].as_u64().unwrap_or(0) as usize,
@@ -421,12 +426,12 @@ async fn update(app: &AppHandle, path: &str) -> Result<Value, ApiError> {
         return Ok(json!({"configured": false}));
     }
     let updater = app.updater().map_err(|e| bad(e.to_string()))?;
-    let upd = updater.check().await.map_err(|e| bad(format!("Suche nach Updates fehlgeschlagen: {e}")))?;
+    let upd = updater.check().await.map_err(|e| bad(tx(&format!("Checking for updates failed: {e}"), &format!("Suche nach Updates fehlgeschlagen: {e}"))))?;
     match (path, upd) {
         ("/api/update/check", Some(u)) => Ok(json!({"configured": true, "available": true, "version": u.version, "notes": u.body})),
         ("/api/update/check", None) => Ok(json!({"configured": true, "available": false})),
         ("/api/update/install", Some(u)) => {
-            u.download_and_install(|_, _| {}, || {}).await.map_err(|e| bad(format!("Update fehlgeschlagen: {e}")))?;
+            u.download_and_install(|_, _| {}, || {}).await.map_err(|e| bad(tx(&format!("Update failed: {e}"), &format!("Update fehlgeschlagen: {e}"))))?;
             app.restart();
         }
         _ => Ok(json!({"configured": true, "available": false})),

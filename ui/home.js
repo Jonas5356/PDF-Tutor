@@ -255,9 +255,12 @@ $("settingsBtn").onclick = async () => {
     $("setAutor").value = s.autor || "";
     $("setAutor").placeholder = s.autorStandard || "";
     $("setBackup").checked = !!s.sicherheitskopie;
+    $("setAutoUpdate").checked = s.autoUpdate !== false;
     $("setSprache").value = s.sprache === "de" ? "de" : "en";
     $("updateInfo").textContent = "";
     $("versionInfo").textContent = `Version ${APP?.version || ""}`;
+    // sonst würde nach einem früheren „Speichern“ auch Esc speichern
+    $("settings").returnValue = "";
     $("settings").showModal();
   } catch (e) {
     showBanner(t("Could not load the settings: {msg}", { msg: e.message }));
@@ -266,10 +269,14 @@ $("settingsBtn").onclick = async () => {
 $("settings").addEventListener("close", async () => {
   if ($("settings").returnValue !== "save") return;
   try {
+    // leeres oder ungültiges Feld: Grenze unverändert lassen
+    const g = Math.round(Number($("setGrenze").value));
     await api("/api/settings", {
-      hinweise: $("setHinweise").value, volltextGrenze: Number($("setGrenze").value) || 0,
+      hinweise: $("setHinweise").value, volltextGrenze: $("setGrenze").value.trim() && Number.isFinite(g) && g >= 0 ? g : undefined,
       autor: $("setAutor").value, sicherheitskopie: $("setBackup").checked, sprache: $("setSprache").value,
+      autoUpdate: $("setAutoUpdate").checked,
     });
+    if (APP) APP.autoUpdate = $("setAutoUpdate").checked;
   } catch (e) {
     showBanner(t("Saving failed: {msg}", { msg: e.message }));
   }
@@ -299,6 +306,16 @@ async function checkUpdate(manual) {
   }
 }
 
+// Automatische Suche: beim Start und danach höchstens alle 6 Stunden (abschaltbar)
+function autoCheckUpdate() {
+  if (!APP?.updaterConfigured || APP.autoUpdate === false) return;
+  let last = 0;
+  try { last = +localStorage.getItem("pdftutor-update-check") || 0; } catch {}
+  if (Date.now() - last < 6 * 3600 * 1000) return;
+  try { localStorage.setItem("pdftutor-update-check", String(Date.now())); } catch {}
+  checkUpdate(false);
+}
+
 function showUpdateBanner(version) {
   const b = $("updateBanner");
   b.querySelector(".txt").textContent = t("A new version ({v}) is available.", { v: version });
@@ -322,14 +339,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) load
     APP = {};
   }
   window.PT.setTitle("PDF-Tutor");
-  if (APP.updaterConfigured) {
-    let last = 0;
-    try { last = +localStorage.getItem("pdftutor-update-check") || 0; } catch {}
-    if (Date.now() - last > 6 * 3600 * 1000) {
-      try { localStorage.setItem("pdftutor-update-check", String(Date.now())); } catch {}
-      checkUpdate(false);
-    }
-  }
+  autoCheckUpdate();
+  setInterval(autoCheckUpdate, 3600 * 1000);
   if (APP.claudeFound === false) {
     showBanner(t("Claude Code was not found. Reading works, but questions will not. Check in PowerShell with “claude --version” whether it is installed."));
   }

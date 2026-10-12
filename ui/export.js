@@ -249,7 +249,7 @@ async function init() {
 }
 
 // Reihenfolge innerhalb der Seite: von oben nach unten (PDF-Koordinaten: größeres y = weiter oben)
-const pdfTop = (n) => Math.max(...(n.pdfRects || [[0, 0, 0, 0]]).map((r) => r[3]));
+const pdfTop = (n) => (n.pdfRects?.length ? Math.max(...n.pdfRects.map((r) => r[3])) : 0);
 
 init().catch((e) => {
   const b = $("banner");

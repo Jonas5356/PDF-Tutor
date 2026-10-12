@@ -94,6 +94,9 @@ pub struct Settings {
     /// Vor der ersten Änderung eines PDFs eine Kopie im Datenordner ablegen
     #[serde(default = "default_true")]
     pub sicherheitskopie: bool,
+    /// Beim Start und alle 6 Stunden nach einer neuen Version suchen
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
     /// Sprache der Oberfläche: "en" oder "de" (fehlt: beim Start bestimmen)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sprache: Option<String>,

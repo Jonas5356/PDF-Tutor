@@ -303,8 +303,16 @@ async function render(p) {
   const id = ++p.renderId;
   if (!p.pdfPage) {
     p.loading = true;
-    try { p.pdfPage = await S.pdf.getPage(p.num); } catch { return; } finally { p.loading = false; }
-    if (p.renderId !== id) return;
+    const doc = S.pdf;
+    let page;
+    try { page = await doc.getPage(p.num); } catch { p.loading = false; return; }
+    p.loading = false;
+    // Inzwischen neu geladen oder aus dem Bild gescrollt: Seite gehört evtl. zum alten Dokument
+    if (doc !== S.pdf || p.renderId !== id) {
+      if (p.visible && !p.rendered && !p.task) render(p);
+      return;
+    }
+    p.pdfPage = page;
   }
   const vp = p.pdfPage.getViewport({ scale: pageScale(p) });
   const dpr = window.devicePixelRatio || 1;
@@ -350,7 +358,7 @@ async function render(p) {
 function unrender(p) {
   p.renderId++;
   if (p.task) { try { p.task.cancel(); } catch {} p.task = null; }
-  if (!p.rendered) return;
+  // auch halb fertige Seiten aufräumen (Bild schon da, Textebene noch nicht)
   p.div.querySelector("canvas")?.remove();
   p.text.replaceChildren();
   p.find.replaceChildren();
@@ -738,7 +746,7 @@ function composeOn(id, mode) {
   S.compose = { id, mode };
   n.collapsed = false;
   openNote(n, true);
-  requestAnimationFrame(() => notesEl.querySelector(`.card[data-id="${id}"] .composer textarea`)?.focus({ preventScroll: true }));
+  requestAnimationFrame(() => notesEl.querySelector(`.card[data-id="${CSS.escape(id)}"] .composer textarea`)?.focus({ preventScroll: true }));
 }
 
 // ---------------------------------------------------------------------------
@@ -797,7 +805,7 @@ function renderHighlights() {
 }
 
 function setHlClass(id, cls, on) {
-  document.querySelectorAll(`.hl[data-id="${id}"]`).forEach((d) => d.classList.toggle(cls, on));
+  document.querySelectorAll(`.hl[data-id="${CSS.escape(id)}"]`).forEach((d) => d.classList.toggle(cls, on));
 }
 
 // ---------------------------------------------------------------------------
@@ -851,7 +859,7 @@ function renderAllCards() {
 
 function refreshCard(note) {
   const saved = saveInputs();
-  const old = notesEl.querySelector(`.card[data-id="${note.id}"]`);
+  const old = notesEl.querySelector(`.card[data-id="${CSS.escape(note.id)}"]`);
   if (!hasCard(note)) { old?.remove(); layoutNotes(); return; }
   const fresh = buildCard(note);
   if (old) old.replaceWith(fresh); else notesEl.append(fresh);
@@ -1115,7 +1123,7 @@ function openNote(n, scrollToCard) {
   renderAllCards();
   if (scrollToCard) {
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const card = notesEl.querySelector(`.card[data-id="${n.id}"]`);
+      const card = notesEl.querySelector(`.card[data-id="${CSS.escape(n.id)}"]`);
       if (!card) return;
       const top = card.offsetTop + notesEl.offsetTop;
       const bottom = top + card.offsetHeight;
@@ -1224,9 +1232,15 @@ async function ask(note, question, retry, saved = false) {
     replaceNote(prepNote(updated));
     api("/api/notes").then((d) => { S.undo = d.undo || null; S.version = d.version; updateUndo(); }).catch(() => {});
   } catch (e) {
-    const last = note.thread[note.thread.length - 1];
-    Object.assign(last, { status: "error", text: tr("Error: {msg}", { msg: e.message }) });
-    refreshCard(note);
+    // Notizliste kann inzwischen neu geladen worden sein: aktuelles Objekt verwenden
+    const cur = S.notes.find((x) => x.id === note.id) || note;
+    const last = cur.thread[cur.thread.length - 1];
+    if (last && last.role === "assistant" && last.status === "pending") {
+      Object.assign(last, { status: "error", text: tr("Error: {msg}", { msg: e.message }) });
+    } else {
+      cur.thread.push({ role: "assistant", status: "error", text: tr("Error: {msg}", { msg: e.message }), time: new Date().toISOString() });
+    }
+    refreshCard(cur);
   }
 }
 
@@ -1542,7 +1556,7 @@ function focusNote(n) {
   if (hasCard(n)) openNote(n, false);
   else { renderHighlights(); renderSidebarNotes(); }
   setTimeout(() => {
-    document.querySelectorAll(`.hl[data-id="${n.id}"]`).forEach((d) => {
+    document.querySelectorAll(`.hl[data-id="${CSS.escape(n.id)}"]`).forEach((d) => {
       d.classList.remove("flash");
       void d.offsetWidth;
       d.classList.add("flash");

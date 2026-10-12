@@ -548,7 +548,7 @@ impl Editor {
             return Err(tx("No highlight given", "Keine Markierung übergeben"));
         }
         if kind == Kind::Note {
-            return Err("Falsche Art".into());
+            return Err(tx("Wrong kind", "Falsche Art"));
         }
         let page_id = self.page_id(page_no)?;
         let (_, rot) = page_view(self.doc(), page_id);

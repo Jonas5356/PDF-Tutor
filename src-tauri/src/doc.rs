@@ -113,8 +113,8 @@ impl Doc {
             e.pages = Some(n);
         });
         if let Some(e) = ctx.lib.get(id) {
-            if e.last_page.is_some() {
-                doc.cache.focus.store(e.last_page.unwrap().max(1), std::sync::atomic::Ordering::Relaxed);
+            if let Some(lp) = e.last_page {
+                doc.cache.focus.store(lp.max(1), std::sync::atomic::Ordering::Relaxed);
             }
             if !e.notes_imported {
                 if let Err(err) = doc.import_v3_notes(ctx) {
@@ -178,7 +178,9 @@ impl Doc {
                     m[out] = u.meta[k].clone();
                 }
             }
-            v["thread"].as_array_mut().map(|a| a.push(m));
+            if let Some(a) = v["thread"].as_array_mut() {
+                a.push(m);
+            }
         }
         v
     }
@@ -412,16 +414,18 @@ impl Doc {
         self.modify_undoable(ctx, &label, |ed| ed.delete_note(&n))?;
         self.extra.lock().unwrap().remove(id);
         self.unsaved.lock().unwrap().retain(|u| u.note_id != id);
-        for img in std::fs::read_dir(&ctx.paths.marks).into_iter().flatten().flatten() {
-            if img.file_name().to_string_lossy().starts_with(&format!("markierung_{}", safe(id))) {
-                let _ = std::fs::remove_file(img.path());
-            }
-        }
+        let _ = std::fs::remove_file(self.mark_path(ctx, id));
         Ok(())
     }
 
+    /// Bild der markierten Stelle für Claude. Mit Dokument-ID im Namen, weil Kennungen wie
+    /// "o12_0" (Anmerkungen ohne /NM aus anderen Programmen) in mehreren PDFs vorkommen.
+    fn mark_path(&self, ctx: &Ctx, note_id: &str) -> PathBuf {
+        ctx.paths.marks.join(format!("markierung_{}_{}.png", safe(&self.id), safe(note_id)))
+    }
+
     fn mark_image(&self, ctx: &Ctx, n: &Note) -> Result<PathBuf, String> {
-        let out = ctx.paths.marks.join(format!("markierung_{}.png", safe(&n.id)));
+        let out = self.mark_path(ctx, &n.id);
         let bytes = std::fs::read(&self.path).map_err(|e| e.to_string())?;
         pdfium_host::render_mark_png(&bytes, n.page - 1, &n.rects, &out)?;
         Ok(out)
@@ -438,6 +442,7 @@ impl Doc {
     }
 
     /// Frage stellen. `saved`: die Frage steht schon im PDF (Kommentar der neuen Markierung).
+    #[allow(clippy::too_many_arguments)]
     pub fn ask(
         self: &Arc<Self>,
         ctx: &Arc<Ctx>,

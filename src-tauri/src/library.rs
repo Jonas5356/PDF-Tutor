@@ -267,16 +267,26 @@ impl Library {
         let mut folders_out = vec![];
         let mut changed = false;
         let folders = d.folders.clone();
+        // Pfad → ID einmal aufbauen statt für jede gefundene Datei alle Einträge zu durchsuchen
+        let mut index: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        if !folders.is_empty() {
+            for (id, e) in &d.docs {
+                index.entry(norm_path(Path::new(&e.path))).or_insert_with(|| id.clone());
+            }
+        }
         for folder in &folders {
             let fp = Path::new(folder);
             let mut docs = vec![];
             if fp.is_dir() {
                 for pdf in Self::scan(fp) {
-                    let id = match Self::find_by_path(&d, &pdf) {
-                        Some(id) => id,
+                    let key = norm_path(&pdf);
+                    let id = match index.get(&key) {
+                        Some(id) => id.clone(),
                         None => {
                             changed = true;
-                            Self::new_entry(&mut d, &pdf)
+                            let id = Self::new_entry(&mut d, &pdf);
+                            index.insert(key, id.clone());
+                            id
                         }
                     };
                     if d.hidden.contains(&id) {
