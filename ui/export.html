@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lernzettel – PDF-Tutor</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="sheet.css">
+<link rel="stylesheet" href="export.css">
+<script src="vendor/katex/katex.min.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script src="bridge.js"></script>
+</head>
+<body>
+<header class="ex-bar">
+  <div class="ex-title">Lernzettel</div>
+  <div class="ex-opts">
+    <label><input type="checkbox" id="optPlain" checked> Markierungen ohne Kommentar</label>
+    <label><input type="checkbox" id="optComments" checked> Eigene Kommentare</label>
+    <label><input type="checkbox" id="optClaude" checked> Fragen und Antworten von Claude</label>
+    <label><input type="checkbox" id="optSticky" checked> Haftnotizen</label>
+    <span class="ex-colors" id="optColors" title="Nur diese Farben (keine Auswahl: alle)"></span>
+  </div>
+  <div class="ex-actions">
+    <button id="printBtn" class="btn primary">Drucken / als PDF …</button>
+    <button id="htmlBtn" class="btn">Als HTML …</button>
+    <button id="mdBtn" class="btn">Als Markdown …</button>
+  </div>
+</header>
+<div id="banner" class="banner" hidden></div>
+<main class="ex-main"><article id="sheet" class="sheet"></article></main>
+<div id="toast" class="toast" hidden><span class="txt"></span><button class="act" hidden></button></div>
+<script type="module" src="export.js"></script>
+</body>
+</html>

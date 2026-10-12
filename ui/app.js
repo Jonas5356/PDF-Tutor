@@ -1,4 +1,5 @@
 import * as pdfjsLib from "./vendor/pdf.min.mjs";
+import { esc, renderMD } from "./render.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.mjs";
 
@@ -22,6 +23,8 @@ const S = {
   compose: null,    // {id, mode}: Eingabefeld einer Notiz für Kommentar ("comment") oder Frage ("ask")
   tool: null,       // "sticky": nächster Klick setzt eine Haftnotiz
   undo: null,       // Beschreibung des Schritts, den Strg+Z zurücknimmt
+  find: { q: "", matches: [], cur: -1, texts: new Map(), run: 0 },
+  sidebar: { open: false, tab: "toc", outline: null, thumbsBuilt: false },
 };
 
 // ---------------------------------------------------------------------------
@@ -38,10 +41,6 @@ function api(path, body) {
 
 const pdfUrl = () => `${window.PT.protoUrl(`doc/${DOC_ID}/pdf`)}?v=${Date.now()}`;
 
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
 function debounce(fn, ms) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
@@ -57,29 +56,6 @@ function pageLabel(num) {
 function modelLabel(id) {
   const m = (S.info?.models || []).find((m) => m.id === id);
   return m ? m.label.replace(/\s*\(.*\)/, "") : id;
-}
-
-// Markdown + LaTeX ----------------------------------------------------------
-
-function renderMD(src) {
-  const math = [];
-  const ph = (t, display) => { math.push({ t, display }); return `MATHPH${math.length - 1}X`; };
-  let s = String(src || "");
-  s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, t) => ph(t, true));
-  s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_, t) => ph(t, true));
-  s = s.replace(/\\\(([\s\S]+?)\\\)/g, (_, t) => ph(t, false));
-  s = s.replace(/(^|[^\\$])\$(?!\s)([^$\n]+?)(?<![\s\\])\$(?!\d)/g, (_, pre, t) => pre + ph(t, false));
-  let html = window.marked.parse(s, { gfm: true, breaks: false });
-  html = window.DOMPurify.sanitize(html, { ADD_ATTR: ["target"], FORBID_TAGS: ["img", "iframe", "form"] });
-  html = html.replace(/<a /g, '<a target="_blank" rel="noopener" ');
-  return html.replace(/MATHPH(\d+)X/g, (_, i) => {
-    const { t, display } = math[+i];
-    try {
-      return window.katex.renderToString(t, { displayMode: display, throwOnError: false, output: "html" });
-    } catch {
-      return esc(t);
-    }
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +115,7 @@ async function init() {
   applyScale(false);
   renderHighlights();
   renderAllCards();
+  initSidebar();
 
   const observer = new IntersectionObserver(onIntersect, { root: scroller, rootMargin: "1500px 0px" });
   S.pages.forEach((p) => observer.observe(p.div));
@@ -155,12 +132,14 @@ function addPage(pdfPage) {
   div.dataset.num = pdfPage.pageNumber;
   const hl = document.createElement("div");
   hl.className = "hl-layer";
+  const find = document.createElement("div");
+  find.className = "find-layer";
   const text = document.createElement("div");
   text.className = "textLayer";
-  div.append(hl, text);
+  div.append(hl, find, text);
   pagesEl.append(div);
   S.pages.push({
-    num: pdfPage.pageNumber, div, hl, text, w0: vp.width, h0: vp.height, vp1: vp, pdfPage,
+    num: pdfPage.pageNumber, div, hl, find, text, w0: vp.width, h0: vp.height, vp1: vp, pdfPage,
     rendered: false, renderId: 0, task: null, visible: false, loading: false,
   });
 }
@@ -204,6 +183,7 @@ async function reloadPdf() {
     if (wasShown) render(p);
   }
   setTimeout(() => old?.destroy(), 2000);
+  invalidateThumbs();
 }
 
 // Neuen Stand der Notizen holen; wurde das PDF von außen verändert, neu laden
@@ -313,6 +293,7 @@ async function render(p) {
   p.text.append(end);
   p.task = null;
   p.rendered = true;
+  if (S.find.q) highlightFindOnPage(p);
 }
 
 function unrender(p) {
@@ -321,6 +302,7 @@ function unrender(p) {
   if (!p.rendered) return;
   p.div.querySelector("canvas")?.remove();
   p.text.replaceChildren();
+  p.find.replaceChildren();
   p.rendered = false;
 }
 
@@ -349,6 +331,7 @@ function updateCurrentPage() {
   if (n === lastShownPage) return;
   lastShownPage = n;
   if (document.activeElement !== $("pageInput")) $("pageInput").value = n;
+  markCurrentThumb(n);
   const l = pageLabel(n);
   $("pageLabel").textContent = l !== String(n) ? `(gedruckt: ${l})` : "";
   saveState({ lastPage: n });
@@ -788,6 +771,7 @@ function renderAllCards() {
   if (S.draft) notesEl.append(buildDraftCard());
   restoreInputs(saved);
   layoutNotes();
+  renderSidebarNotes();
 }
 
 function refreshCard(note) {
@@ -1128,6 +1112,11 @@ function showToast(text, action, fn) {
 
 document.addEventListener("keydown", (e) => {
   const typing = e.target.closest && e.target.closest("textarea, input, select");
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    openFind();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z" && !typing) {
     e.preventDefault();
     if (S.undo) doUndo();
@@ -1201,6 +1190,485 @@ window.addEventListener("focus", () => {
   if (!S.pdf || S.notes.some(isPending)) return;
   refreshNotes().catch(() => {});
 });
+
+
+// ---------------------------------------------------------------------------
+// Seitenleiste: Inhalt, Seiten, Notizen
+// ---------------------------------------------------------------------------
+
+const sidebar = $("sidebar");
+
+function initSidebar() {
+  let st = {};
+  try { st = JSON.parse(localStorage.getItem("pdftutor-sidebar") || "{}"); } catch {}
+  S.sidebar.tab = ["toc", "thumbs", "notes"].includes(st.tab) ? st.tab : "toc";
+  sidebar.querySelectorAll(".sb-tab").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  $("sidebarBtn").onclick = () => toggleSidebar(!S.sidebar.open);
+  buildNoteFilters();
+  toggleSidebar(!!st.open, false);
+}
+
+function saveSidebar() {
+  try { localStorage.setItem("pdftutor-sidebar", JSON.stringify({ open: S.sidebar.open, tab: S.sidebar.tab })); } catch {}
+}
+
+function toggleSidebar(open, save = true) {
+  S.sidebar.open = open;
+  sidebar.hidden = !open;
+  $("sidebarBtn").classList.toggle("on", open);
+  if (open) showTab(S.sidebar.tab, false);
+  if (save) saveSidebar();
+  layoutNotes();
+}
+
+function showTab(tab, save = true) {
+  S.sidebar.tab = tab;
+  sidebar.querySelectorAll(".sb-tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+  sidebar.querySelectorAll(".sb-pane").forEach((p) => (p.hidden = p.dataset.tab !== tab));
+  if (tab === "toc") buildOutline();
+  if (tab === "thumbs") buildThumbs();
+  if (tab === "notes") renderSidebarNotes();
+  if (save) saveSidebar();
+}
+
+// --- Inhaltsverzeichnis ------------------------------------------------------
+
+async function resolveDest(dest) {
+  try {
+    const d = typeof dest === "string" ? await S.pdf.getDestination(dest) : dest;
+    if (!Array.isArray(d) || !d[0]) return null;
+    const idx = typeof d[0] === "object" ? await S.pdf.getPageIndex(d[0]) : d[0];
+    const page = idx + 1;
+    let y = null;
+    const p = S.pages[page - 1];
+    // XYZ: [ref, XYZ, links, oben, zoom]; FitH/FitBH: [ref, FitH, oben]
+    const name = d[1]?.name;
+    const top = name === "XYZ" ? d[3] : name === "FitH" || name === "FitBH" ? d[2] : null;
+    if (p && typeof top === "number") {
+      const [, vy] = p.vp1.convertToViewportPoint(typeof d[2] === "number" && name === "XYZ" ? d[2] : 0, top);
+      y = Math.max(0, Math.min(1, vy / p.vp1.height));
+    }
+    return { page, y };
+  } catch {
+    return null;
+  }
+}
+
+async function buildOutline() {
+  const pane = $("sbToc");
+  if (S.sidebar.outline) return;
+  S.sidebar.outline = "loading";
+  let outline = null;
+  try { outline = await S.pdf.getOutline(); } catch {}
+  if (!outline || !outline.length) {
+    pane.innerHTML = `<div class="sb-empty">Dieses PDF hat kein Inhaltsverzeichnis.<br>Unter <b>Seiten</b> findest du die Miniaturansichten.</div>`;
+    S.sidebar.outline = "none";
+    return;
+  }
+  const build = (items, depth) => {
+    const ul = document.createElement("ul");
+    ul.className = "toc";
+    for (const it of items) {
+      const li = document.createElement("li");
+      const row = document.createElement("div");
+      row.className = "toc-row";
+      row.style.paddingLeft = `${6 + depth * 14}px`;
+      const tg = document.createElement("button");
+      tg.className = "toc-tg";
+      const hasKids = it.items && it.items.length;
+      tg.textContent = hasKids ? (depth === 0 ? "▾" : "▸") : "";
+      tg.disabled = !hasKids;
+      const a = document.createElement("a");
+      a.className = "toc-link";
+      a.textContent = it.title || "(ohne Titel)";
+      a.title = it.title || "";
+      a.href = "#";
+      a.addEventListener("click", async (e) => {
+        e.preventDefault();
+        if (!it.dest) return;
+        const t = await resolveDest(it.dest);
+        if (t) scrollToSpot(t.page, t.y);
+      });
+      row.append(tg, a);
+      li.append(row);
+      if (hasKids) {
+        const sub = build(it.items, depth + 1);
+        sub.hidden = depth > 0;
+        li.append(sub);
+        tg.addEventListener("click", () => { sub.hidden = !sub.hidden; tg.textContent = sub.hidden ? "▸" : "▾"; });
+      }
+      ul.append(li);
+    }
+    return ul;
+  };
+  pane.replaceChildren(build(outline, 0));
+  S.sidebar.outline = "done";
+}
+
+function scrollToSpot(page, y) {
+  const p = S.pages[page - 1];
+  if (!p) return;
+  const top = p.div.offsetTop + (y != null ? y * p.div.offsetHeight - 40 : -12);
+  scroller.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+}
+
+// --- Miniaturansichten ---------------------------------------------------------
+
+let thumbObserver = null;
+const THUMB_W = 150;
+
+function buildThumbs() {
+  const pane = $("sbThumbs");
+  if (S.sidebar.thumbsBuilt) { markCurrentThumb(currentPage()); return; }
+  S.sidebar.thumbsBuilt = true;
+  thumbObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) renderThumb(+e.target.dataset.num);
+  }, { root: pane, rootMargin: "300px 0px" });
+  for (const p of S.pages) {
+    const t = document.createElement("div");
+    t.className = "thumb";
+    t.dataset.num = p.num;
+    const box = document.createElement("div");
+    box.className = "thumb-img";
+    box.style.width = `${THUMB_W}px`;
+    box.style.height = `${Math.round((THUMB_W * p.vp1.height) / p.vp1.width)}px`;
+    const lab = document.createElement("div");
+    lab.className = "thumb-lab";
+    lab.textContent = pageLabel(p.num);
+    t.append(box, lab);
+    t.addEventListener("click", () => scrollToPage(p.num, false));
+    pane.append(t);
+    thumbObserver.observe(t);
+  }
+  markCurrentThumb(currentPage());
+}
+
+const thumbState = new Map(); // Seite -> "busy" | "done"
+async function renderThumb(num) {
+  if (thumbState.get(num)) return;
+  thumbState.set(num, "busy");
+  const el = $("sbThumbs").querySelector(`.thumb[data-num="${num}"] .thumb-img`);
+  try {
+    const page = await S.pdf.getPage(num);
+    const vp = page.getViewport({ scale: (THUMB_W * 2) / page.getViewport({ scale: 1 }).width });
+    const c = document.createElement("canvas");
+    c.width = Math.floor(vp.width);
+    c.height = Math.floor(vp.height);
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    el.replaceChildren(c);
+    thumbState.set(num, "done");
+  } catch {
+    thumbState.delete(num);
+  }
+}
+
+function invalidateThumbs() {
+  if (!S.sidebar.thumbsBuilt) return;
+  thumbState.clear();
+  const pane = $("sbThumbs");
+  const pr = pane.getBoundingClientRect();
+  pane.querySelectorAll(".thumb").forEach((t) => {
+    const b = t.getBoundingClientRect();
+    if (b.bottom > pr.top - 300 && b.top < pr.bottom + 300) renderThumb(+t.dataset.num);
+  });
+}
+
+function markCurrentThumb(n) {
+  if (!S.sidebar.thumbsBuilt) return;
+  const pane = $("sbThumbs");
+  pane.querySelector(".thumb.cur")?.classList.remove("cur");
+  const t = pane.querySelector(`.thumb[data-num="${n}"]`);
+  if (!t) return;
+  t.classList.add("cur");
+  if (!pane.hidden) {
+    const pr = pane.getBoundingClientRect(), b = t.getBoundingClientRect();
+    if (b.top < pr.top || b.bottom > pr.bottom) pane.scrollTop += b.top - pr.top - pr.height / 3;
+  }
+}
+
+// --- Notizliste ----------------------------------------------------------------
+
+const noteFilter = { colors: new Set(), kind: "all" };
+
+function buildNoteFilters() {
+  const box = $("sbNoteColors");
+  COLORS.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "sw small";
+    b.title = `Nur ${c.name}`;
+    b.style.background = css(c.hl);
+    b.addEventListener("click", () => {
+      noteFilter.colors.has(i) ? noteFilter.colors.delete(i) : noteFilter.colors.add(i);
+      b.classList.toggle("on", noteFilter.colors.has(i));
+      renderSidebarNotes();
+    });
+    box.append(b);
+  });
+  $("sbNoteKind").onchange = (e) => { noteFilter.kind = e.target.value; renderSidebarNotes(); };
+}
+
+function noteMatches(n) {
+  if (noteFilter.colors.size && !noteFilter.colors.has(colorIndex(n.color))) return false;
+  const th = n.thread || [];
+  switch (noteFilter.kind) {
+    case "comment": return th.some((m, i) => m.role === "user" && !(th[i + 1] && th[i + 1].role === "assistant"));
+    case "claude": return th.some((m) => m.role === "assistant");
+    case "plain": return th.length === 0 && n.subtype !== "Text";
+    case "sticky": return n.subtype === "Text";
+    default: return true;
+  }
+}
+
+function renderSidebarNotes() {
+  if (!S.sidebar.open || S.sidebar.tab !== "notes") return;
+  const list = $("sbNoteList");
+  const sorted = [...S.notes].sort((a, b) => a.page - b.page || (a.rects[0]?.y || 0) - (b.rects[0]?.y || 0));
+  const shown = sorted.filter(noteMatches);
+  $("sbNoteCount").textContent = shown.length === S.notes.length ? `${S.notes.length} ${S.notes.length === 1 ? "Notiz" : "Notizen"}` : `${shown.length} von ${S.notes.length}`;
+  list.replaceChildren();
+  if (!shown.length) {
+    list.innerHTML = `<div class="sb-empty">${S.notes.length ? "Keine Notizen für diesen Filter." : "Noch keine Markierungen oder Notizen."}</div>`;
+    return;
+  }
+  let lastPage = 0;
+  for (const n of shown) {
+    if (n.page !== lastPage) {
+      lastPage = n.page;
+      const h = document.createElement("div");
+      h.className = "sbn-page";
+      h.textContent = `Seite ${pageLabel(n.page)}`;
+      list.append(h);
+    }
+    const th = n.thread || [];
+    const firstUser = th.find((m) => m.role === "user");
+    const claude = th.some((m) => m.role === "assistant");
+    const icon = { Highlight: `<span class="k-hl" style="background:${css(n.color)}">ab</span>`, Underline: `<u style="text-decoration-color:${css(n.color)}">U</u>`, StrikeOut: `<s style="text-decoration-color:${css(n.color)}">S</s>`, Text: `<span class="k-note" style="background:${css(n.color)}"></span>` }[n.subtype] || "•";
+    const el = document.createElement("div");
+    el.className = "sbn" + (n.id === S.activeId ? " on" : "");
+    el.dataset.id = n.id;
+    el.innerHTML = `<div class="sbn-k">${icon}</div><div class="sbn-b">
+        ${n.text ? `<div class="sbn-q">${esc(n.text.length > 140 ? n.text.slice(0, 140) + " …" : n.text)}</div>` : ""}
+        ${firstUser ? `<div class="sbn-c">${esc(firstUser.text.replace(/[#*$`\\]/g, "").slice(0, 120))}</div>` : ""}
+        ${claude ? `<span class="sbn-badge">Claude</span>` : ""}
+        ${!n.text && !firstUser ? `<div class="sbn-c muted">${esc(KIND_NAMES[n.subtype] || "Anmerkung")}</div>` : ""}
+      </div>`;
+    el.addEventListener("click", () => focusNote(n));
+    list.append(el);
+  }
+}
+
+function focusNote(n) {
+  const r = n.rects[0];
+  if (r) scrollToSpot(r.page, r.y);
+  S.activeId = n.id;
+  if (hasCard(n)) openNote(n, false);
+  else { renderHighlights(); renderSidebarNotes(); }
+  setTimeout(() => {
+    document.querySelectorAll(`.hl[data-id="${n.id}"]`).forEach((d) => {
+      d.classList.remove("flash");
+      void d.offsetWidth;
+      d.classList.add("flash");
+    });
+  }, 60);
+}
+
+// ---------------------------------------------------------------------------
+// Suche (Strg+F)
+// ---------------------------------------------------------------------------
+
+const findBar = $("findBar");
+const findInput = $("findInput");
+
+// Text für die Suche aufbauen: Leerraum zusammenfassen, Kleinbuchstaben, Trennstrich am
+// Zeilenende entfernen. `pieces`: [{text, node}] oder {eol: true}. Liefert Text und
+// zu jedem Zeichen die Herkunft (Textknoten und Position), falls vorhanden.
+function buildSearchText(pieces) {
+  let str = "";
+  const map = [];
+  const push = (ch, node, off) => {
+    const isWs = /\s/.test(ch);
+    if (isWs) {
+      if (!str.length || str[str.length - 1] === " ") return;
+      ch = " ";
+    } else {
+      const l = ch.toLowerCase();
+      if (l.length === 1) ch = l;
+    }
+    str += ch;
+    map.push(node ? [node, off] : null);
+  };
+  for (const pc of pieces) {
+    if (pc.eol) {
+      // Silbentrennung „Stichproben-“ + Zeilenende: Strich entfernen, nichts einfügen
+      if (str.length > 1 && str[str.length - 1] === "-" && /[a-zäöüß]/.test(str[str.length - 2])) {
+        str = str.slice(0, -1);
+        map.pop();
+      } else push(" ", null, 0);
+      continue;
+    }
+    const t = pc.text || "";
+    for (let i = 0; i < t.length; i++) push(t[i], pc.node, i);
+  }
+  return { str, map };
+}
+
+const normQuery = (q) => q.replace(/\s+/g, " ").trim().toLowerCase();
+
+function findAll(str, q) {
+  const out = [];
+  if (!q) return out;
+  let i = str.indexOf(q);
+  while (i >= 0) { out.push(i); i = str.indexOf(q, i + Math.max(1, q.length)); }
+  return out;
+}
+
+async function pageSearchText(num) {
+  if (S.find.texts.has(num)) return S.find.texts.get(num);
+  const page = await S.pdf.getPage(num);
+  const tc = await page.getTextContent();
+  const pieces = [];
+  for (const it of tc.items) {
+    if (it.str === undefined) continue;
+    pieces.push({ text: it.str });
+    if (it.hasEOL) pieces.push({ eol: true });
+  }
+  const t = buildSearchText(pieces).str;
+  S.find.texts.set(num, t);
+  return t;
+}
+
+function openFind() {
+  findBar.hidden = false;
+  findInput.focus();
+  findInput.select();
+}
+
+function closeFind() {
+  findBar.hidden = true;
+  S.find.q = "";
+  S.find.matches = [];
+  S.find.cur = -1;
+  S.find.run++;
+  for (const p of S.pages) p.find.replaceChildren();
+  $("findCount").textContent = "";
+}
+
+const runFind = debounce(() => startFind(findInput.value), 250);
+findInput.addEventListener("input", runFind);
+findInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); if (normQuery(findInput.value) !== S.find.q) startFind(findInput.value, e.shiftKey ? -1 : 1); else stepFind(e.shiftKey ? -1 : 1); }
+  if (e.key === "Escape") { e.preventDefault(); closeFind(); }
+});
+$("findPrev").onclick = () => stepFind(-1);
+$("findNext").onclick = () => stepFind(1);
+$("findClose").onclick = closeFind;
+// Menü „Weitere Funktionen“
+const moreMenu = $("moreMenu");
+$("moreBtn").onclick = (e) => { e.stopPropagation(); moreMenu.hidden = !moreMenu.hidden; };
+document.addEventListener("click", (e) => { if (!e.target.closest("#moreMenu")) moreMenu.hidden = true; });
+moreMenu.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+  moreMenu.hidden = true;
+  if (b.dataset.act === "collapse") { $("collapseAll").onclick(); return; }
+  const url = b.dataset.act === "export" ? `export.html?id=${DOC_ID}` : `organize.html?id=${DOC_ID}`;
+  window.PT.api("/api/window/open", { url }).catch((e) => showToast(e.message));
+}));
+
+$("findBtn").onclick = () => (findBar.hidden ? openFind() : closeFind());
+
+async function startFind(raw, dir = 1) {
+  const q = normQuery(raw);
+  const run = ++S.find.run;
+  S.find.q = q;
+  S.find.matches = [];
+  S.find.cur = -1;
+  for (const p of S.pages) p.find.replaceChildren();
+  const cnt = $("findCount");
+  if (!q) { cnt.textContent = ""; return; }
+  cnt.textContent = "Suche …";
+  // ab der aktuellen Seite suchen, damit der erste Treffer nahe liegt
+  const start = currentPage();
+  let first = -1;
+  for (let k = 0; k < S.pages.length; k++) {
+    if (run !== S.find.run) return;
+    const num = k + 1;
+    const t = await pageSearchText(num);
+    if (run !== S.find.run) return;
+    findAll(t, q).forEach((_, i) => S.find.matches.push({ page: num, k: i }));
+    if (first < 0 && num >= start && S.find.matches.some((m) => m.page === num)) first = S.find.matches.findIndex((m) => m.page === num);
+    if (k % 20 === 19) cnt.textContent = `Suche … ${Math.round((100 * num) / S.pages.length)} %`;
+  }
+  if (!S.find.matches.length) { cnt.textContent = "Keine Treffer"; findBar.classList.add("none"); return; }
+  findBar.classList.remove("none");
+  for (const p of S.pages) if (p.rendered) highlightFindOnPage(p);
+  goToMatch(first >= 0 ? first : 0);
+}
+
+function stepFind(dir) {
+  const n = S.find.matches.length;
+  if (!n) return;
+  goToMatch((S.find.cur + dir + n) % n);
+}
+
+async function goToMatch(i) {
+  S.find.cur = i;
+  const m = S.find.matches[i];
+  $("findCount").textContent = `${i + 1} von ${S.find.matches.length}`;
+  const p = S.pages[m.page - 1];
+  const run = S.find.run;
+  // Seite in den Blick bringen und warten, bis sie samt Textebene gezeichnet ist
+  const vis = scroller.scrollTop, vh = scroller.clientHeight;
+  if (p.div.offsetTop > vis + vh || p.div.offsetTop + p.div.offsetHeight < vis) scrollToPage(m.page, false);
+  for (let t = 0; t < 60 && !p.rendered; t++) await new Promise((r) => setTimeout(r, 50));
+  if (run !== S.find.run) return;
+  for (const q of S.pages) q.find.querySelectorAll(".find.cur").forEach((d) => d.classList.remove("cur"));
+  highlightFindOnPage(p);
+  const cur = p.find.querySelector(`.find[data-k="${m.k}"]`);
+  if (cur) {
+    const top = p.div.offsetTop + cur.offsetTop;
+    if (top < scroller.scrollTop + 60 || top > scroller.scrollTop + scroller.clientHeight - 80) {
+      scroller.scrollTo({ top: Math.max(0, top - scroller.clientHeight / 3) });
+    }
+  }
+}
+
+// Treffer auf einer gezeichneten Seite markieren (über die Textebene)
+function highlightFindOnPage(p) {
+  p.find.replaceChildren();
+  const q = S.find.q;
+  if (!q || !p.rendered) return;
+  const pieces = [];
+  const walker = document.createTreeWalker(p.text, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.nodeType === 3) pieces.push({ text: n.data, node: n });
+    else if (n.nodeName === "BR") pieces.push({ eol: true });
+  }
+  const { str, map } = buildSearchText(pieces);
+  const hits = findAll(str, q);
+  const pb = p.div.getBoundingClientRect();
+  const cur = S.find.matches[S.find.cur];
+  hits.forEach((idx, k) => {
+    let a = idx, b = idx + q.length - 1;
+    while (a <= b && !map[a]) a++;
+    while (b >= a && !map[b]) b--;
+    if (a > b) return;
+    const r = document.createRange();
+    try {
+      r.setStart(map[a][0], map[a][1]);
+      r.setEnd(map[b][0], map[b][1] + 1);
+    } catch { return; }
+    for (const cr of r.getClientRects()) {
+      if (cr.width < 1) continue;
+      const d = document.createElement("div");
+      d.className = "find" + (cur && cur.page === p.num && cur.k === k ? " cur" : "");
+      d.dataset.k = k;
+      Object.assign(d.style, {
+        left: `${((cr.left - pb.left) / pb.width) * 100}%`, top: `${((cr.top - pb.top) / pb.height) * 100}%`,
+        width: `${(cr.width / pb.width) * 100}%`, height: `${(cr.height / pb.height) * 100}%`,
+      });
+      p.find.append(d);
+    }
+  });
+}
 
 init().catch((e) => {
   console.error(e);

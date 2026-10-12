@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seiten organisieren – PDF-Tutor</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="organize.css">
+<script src="bridge.js"></script>
+</head>
+<body>
+<header class="og-bar">
+  <div class="og-title">Seiten organisieren <span id="ogInfo" class="og-info"></span></div>
+  <div class="og-actions">
+    <button id="addBtn" class="btn">PDF hinzufügen …</button>
+    <span class="sep"></span>
+    <button id="rotLeftBtn" class="btn icon" title="Auswahl nach links drehen" disabled>↺</button>
+    <button id="rotRightBtn" class="btn icon" title="Auswahl nach rechts drehen (R)" disabled>↻</button>
+    <button id="delBtn" class="btn" title="Auswahl entfernen (Entf)" disabled>Entfernen</button>
+    <button id="undoBtn" class="btn icon" title="Rückgängig (Strg+Z)" disabled>↶</button>
+    <span class="sep"></span>
+    <button id="saveBtn" class="btn primary" disabled>Als neue Datei speichern …</button>
+  </div>
+</header>
+<div id="hint" class="og-hint">Seiten ziehen zum Umsortieren · Klick wählt aus, mit Strg oder Umschalt mehrere · Das Original bleibt unverändert.</div>
+<main id="grid" class="og-grid">
+  <div id="empty" class="og-empty" hidden>
+    <p>Noch keine Seiten. Füge ein oder mehrere PDFs hinzu, um sie zusammenzufügen oder Seiten umzusortieren.</p>
+    <button id="addBtn2" class="btn primary">PDF hinzufügen …</button>
+  </div>
+</main>
+<div id="marker" class="og-marker" hidden></div>
+<div id="toast" class="toast" hidden><span class="txt"></span><button class="act" hidden></button></div>
+<script type="module" src="organize.js"></script>
+</body>
+</html>

@@ -11,6 +11,9 @@ Der PDF-Tutor ist für Lehrbücher, Skripten und Vorlesungsfolien gedacht. Du li
 - **Fragen zu markierten Stellen.** Claude bekommt die markierte Stelle, ein Bild der Seite und den Kontext des Dokuments. Du kannst auf andere Stellen verweisen, etwa mit „diese und die nächsten 5 Folien“, „Seite 87“, „Abschnitt 3.2“ oder „Wo wurde dieses Symbol eingeführt?“.
 - **Markieren und kommentieren wie in Acrobat.** Text in fünf Farben hervorheben, unterstreichen oder durchstreichen, eigene Kommentare dazuschreiben und Haftnotizen an beliebige Stellen setzen. Ein Klick auf eine Markierung ändert Farbe oder Art. Strg+Z macht den letzten Schritt rückgängig.
 - **Alles steht im PDF.** Markierungen, Fragen und Antworten werden als Standard-PDF-Kommentare gespeichert, als Markierung mit Antwort-Thread wie in Acrobat. Sie sind auch in Acrobat, Edge oder auf dem Tablet sichtbar, und Kommentare aus diesen Programmen erscheinen umgekehrt im PDF-Tutor. Gespeichert wird inkrementell: Der ursprüngliche Inhalt der Datei bleibt Byte für Byte erhalten.
+- **Seitenleiste und Suche.** Inhaltsverzeichnis, Seitenvorschau und eine Liste aller Notizen (filterbar nach Farbe und Art). Strg+F durchsucht das ganze Dokument, auch über Silbentrennungen am Zeilenende hinweg.
+- **Lernzettel.** Alle Markierungen, Kommentare und Claude-Antworten eines Dokuments übersichtlich nach Seiten, mit Formeln. Zum Drucken bzw. als PDF, als eigenständige HTML-Datei oder als Markdown (z. B. für Obsidian).
+- **Seiten organisieren.** PDFs zusammenfügen, Seiten umsortieren, drehen oder entfernen. Das Ergebnis wird als neue Datei gespeichert, die Originale bleiben unverändert; Kommentare wandern mit.
 - **Volltext- oder Suchmodus.** Kleinere Dokumente bekommt Claude komplett mit. In großen Büchern sucht Claude gezielt nach den relevanten Seiten.
 - **Bibliothek.** Unter „Weiterlesen“ findest du zuletzt geöffnete Dokumente samt Lesefortschritt. Zusätzlich lassen sich Ordner einbinden, zum Beispiel deine Vorlesungsunterlagen.
 - **Eigene Hinweise an Claude.** Du kannst einstellen, welches Vorwissen vorausgesetzt werden darf und wie ausführlich die Erklärungen sein sollen.
@@ -62,7 +65,7 @@ Wahlweise unter der [MIT-Lizenz](LICENSE-MIT) oder der [Apache-Lizenz 2.0](LICEN
 
 PDF-Tutor is a PDF reader for studying textbooks, lecture notes and slides. Select a passage, ask a question, and Claude's answer appears in a margin column next to the text, with properly typeset math. Claude sees the selected passage, an image of the page and, as needed, the rest of the document.
 
-Highlight in five colors, underline, strike out, add your own comments and sticky notes. Highlights, comments, questions and answers are stored **inside the PDF** as standard annotations (a highlight with a reply thread). They show up in Acrobat, Edge and other readers. Saving is incremental: the original bytes of the file are never modified.
+Highlight in five colors, underline, strike out, add your own comments and sticky notes. A sidebar shows the outline, page thumbnails and all notes; Ctrl+F searches the document. Notes can be exported as a study sheet (print/PDF, HTML, Markdown), and pages can be merged, reordered, rotated or removed into a new file. Highlights, comments, questions and answers are stored **inside the PDF** as standard annotations (a highlight with a reply thread). They show up in Acrobat, Edge and other readers. Saving is incremental: the original bytes of the file are never modified.
 
 Requirements: Windows 10/11 and [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), signed in with your own Claude subscription or API key. PDF-Tutor never handles credentials; usage is billed to your own account. The UI is currently German only.
 

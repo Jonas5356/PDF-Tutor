@@ -1,0 +1,28 @@
+/* Aussehen des Lernzettels: im Exportfenster, beim Drucken und in der HTML-Datei */
+.sheet { max-width: 780px; margin: 0 auto; background: #fff; color: #1c232c; font-family: "Source Serif 4", Georgia, Cambria, serif; font-size: 16px; line-height: 1.55; padding: 48px 56px 64px; }
+.sheet h1 { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-size: 26px; margin: 0 0 4px; line-height: 1.25; }
+.sheet .sub { color: #5d6773; font-family: "Segoe UI", system-ui, sans-serif; font-size: 13px; margin-bottom: 28px; }
+.sheet h2 { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #2f5d8a; margin: 30px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #dfe4ea; break-after: avoid; }
+.sheet .item { margin: 0 0 18px; break-inside: avoid; }
+.sheet .quote { margin: 0 0 6px; padding: 4px 10px; border-left: 4px solid var(--c, #e2b13c); background: color-mix(in srgb, var(--c, #e2b13c) 16%, white); border-radius: 0 4px 4px 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.sheet .quote.Underline span { text-decoration: underline; text-decoration-color: var(--c); text-decoration-thickness: 2px; }
+.sheet .quote.StrikeOut span { text-decoration: line-through; text-decoration-color: var(--c); text-decoration-thickness: 2px; }
+.sheet .lab { display: block; font-family: "Segoe UI", system-ui, sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #5d6773; margin-top: 8px; }
+.sheet .comment, .sheet .qa { padding-left: 14px; }
+.sheet .q { font-family: "Segoe UI", system-ui, sans-serif; font-weight: 600; font-size: 14.5px; }
+.sheet .q p, .sheet .comment p { margin: .15em 0; }
+.sheet .a p { margin: .4em 0; }
+.sheet .a :is(ul, ol) { padding-left: 1.3em; margin: .4em 0; }
+.sheet .a :is(h1, h2, h3, h4) { font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; margin: .8em 0 .3em; text-transform: none; letter-spacing: 0; color: inherit; border: 0; padding: 0; }
+.sheet code { background: #eef1f4; padding: 1px 4px; border-radius: 3px; font-size: .88em; }
+.sheet pre { background: #eef1f4; padding: 8px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
+.sheet table { border-collapse: collapse; font-size: 14px; }
+.sheet :is(th, td) { border: 1px solid #cfd5dc; padding: 3px 6px; }
+.sheet .katex-display { margin: .5em 0; overflow-x: auto; overflow-y: hidden; }
+.sheet .sticky { border-left: 4px solid var(--c, #ffd84d); padding: 2px 10px; background: color-mix(in srgb, var(--c, #ffd84d) 14%, white); border-radius: 0 4px 4px 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.sheet .sticky .lab { margin-top: 2px; }
+.sheet .empty { color: #5d6773; font-style: italic; }
+@media print {
+  .sheet { padding: 0; max-width: none; }
+  @page { margin: 18mm 16mm; }
+}

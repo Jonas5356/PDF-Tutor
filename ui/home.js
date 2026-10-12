@@ -241,6 +241,7 @@ async function relink(d) {
 
 $("openBtn").onclick = openPdf;
 $("folderBtn").onclick = addFolder;
+$("organizeBtn").onclick = () => api("/api/window/open", { url: "organize.html" }).catch((e) => alert(e.message));
 document.querySelector('#empty [data-act="open"]').onclick = openPdf;
 document.querySelector('#empty [data-act="folder"]').onclick = addFolder;
 $("search").addEventListener("input", render);

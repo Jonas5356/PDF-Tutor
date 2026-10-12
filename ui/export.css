@@ -1,0 +1,28 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: var(--font); color: var(--ink); background: var(--bg); }
+.ex-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 10px 18px; background: var(--bar); border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.ex-title { font-weight: 600; font-size: 15px; }
+.ex-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; flex: 1; }
+.ex-opts label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.ex-colors { display: inline-flex; gap: 5px; }
+.sw { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); cursor: pointer; padding: 0; }
+.sw.on { box-shadow: 0 0 0 2px var(--bar), 0 0 0 4px var(--accent); }
+.ex-actions { display: flex; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--paper); border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn:hover { filter: brightness(1.04); }
+.ex-main { padding: 26px 16px 60px; }
+.ex-main .sheet { box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 4px 14px rgba(0,0,0,.06); }
+.banner { background: #fbe9e5; color: var(--err); padding: 8px 18px; font-size: 14px; }
+.banner[hidden] { display: none; }
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60; background: #2b3440; color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 13.5px; display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.25); max-width: 80vw; }
+.toast[hidden] { display: none; }
+.toast .act { background: none; border: 0; color: #9cc8ff; font-weight: 600; cursor: pointer; padding: 0; }
+.toast .act[hidden] { display: none; }
+@media print {
+  body { background: #fff; }
+  .ex-bar, .banner, .toast { display: none !important; }
+  .ex-main { padding: 0; }
+  .ex-main .sheet { box-shadow: none; }
+}

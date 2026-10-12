@@ -232,3 +232,79 @@ pub fn texts_in_rects(bytes: &[u8], items: &[(u32, Vec<[f32; 4]>)]) -> Result<Ve
         Ok(out)
     })
 }
+
+/// Eine Seite des neuen Dokuments: Quelldokument, Seite (ab 0) und zusätzliche Drehung in Grad.
+pub struct PageSpec {
+    pub src: usize,
+    pub page: u32,
+    pub rotate: i32,
+}
+
+fn rot_from_deg(d: i32) -> PdfPageRenderRotation {
+    match d.rem_euclid(360) {
+        90 => PdfPageRenderRotation::Degrees90,
+        180 => PdfPageRenderRotation::Degrees180,
+        270 => PdfPageRenderRotation::Degrees270,
+        _ => PdfPageRenderRotation::None,
+    }
+}
+
+fn rot_to_deg(r: PdfPageRenderRotation) -> i32 {
+    match r {
+        PdfPageRenderRotation::None => 0,
+        PdfPageRenderRotation::Degrees90 => 90,
+        PdfPageRenderRotation::Degrees180 => 180,
+        PdfPageRenderRotation::Degrees270 => 270,
+    }
+}
+
+/// Neues PDF aus Seiten mehrerer Dokumente zusammenstellen (Reihenfolge, Drehung).
+/// Kommentare auf den Seiten werden mitkopiert; die Quelldateien bleiben unverändert.
+pub fn assemble(sources: &[Vec<u8>], spec: &[PageSpec]) -> Result<Vec<u8>, String> {
+    if spec.is_empty() {
+        return Err("Das neue Dokument hätte keine Seiten.".into());
+    }
+    with(|p| {
+        let docs: Vec<PdfDocument> = sources
+            .iter()
+            .map(|b| p.load_pdf_from_byte_slice(b, None).map_err(|e| format!("Ein PDF konnte nicht gelesen werden: {e:?}")))
+            .collect::<Result<_, _>>()?;
+        let mut out = p.create_new_pdf().map_err(err)?;
+        for (i, s) in spec.iter().enumerate() {
+            let src = docs.get(s.src).ok_or("unbekanntes Quelldokument")?;
+            if s.page as usize >= src.pages().len() as usize {
+                return Err(format!("Seite {} gibt es im Quelldokument nicht.", s.page + 1));
+            }
+            out.pages_mut().copy_page_from_document(src, s.page as PdfPageIndex, i as PdfPageIndex).map_err(err)?;
+            if s.rotate.rem_euclid(360) != 0 {
+                let mut page = out.pages().get(i as PdfPageIndex).map_err(err)?;
+                let cur = page.rotation().map(rot_to_deg).unwrap_or(0);
+                page.set_rotation(rot_from_deg(cur + s.rotate));
+            }
+        }
+        out.save_to_bytes().map_err(err)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assembles_pages_with_rotation_and_annotations() {
+        init(&[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources")]);
+        let dir = std::env::var("PT_TESTDIR").unwrap_or_else(|_| "/tmp/claude-0/special".into());
+        let a = std::fs::read(format!("{dir}/out_rotup_edit.pdf")).unwrap();
+        let b = std::fs::read(format!("{dir}/plain.pdf")).unwrap();
+        let spec = [
+            PageSpec { src: 1, page: 0, rotate: 0 },
+            PageSpec { src: 0, page: 2, rotate: 90 },
+            PageSpec { src: 0, page: 0, rotate: 0 },
+        ];
+        let out = assemble(&[a, b], &spec).unwrap();
+        std::fs::write(format!("{dir}/merged.pdf"), &out).unwrap();
+        let info = doc_info(&out).unwrap();
+        assert_eq!(info.pages, 3);
+        assert!(assemble(&[], &[]).is_err());
+    }
+}

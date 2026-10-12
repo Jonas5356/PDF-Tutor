@@ -5,7 +5,10 @@ Tauri-2-Programm: Die Oberfläche ist HTML/JavaScript ohne Build-Schritt (`ui/`)
 ## Aufbau
 
 - `ui/index.html`, `home.js`, `home.css`: Startseite mit Bibliothek, Einstellungen und Updates
-- `ui/reader.html`, `app.js`, `style.css`: Reader (PDF.js für die Anzeige, Randspalte mit Notizen, KaTeX/marked für Antworten)
+- `ui/reader.html`, `app.js`, `style.css`: Reader (PDF.js für die Anzeige, Randspalte mit Notizen, Seitenleiste mit Inhalt/Seiten/Notizen, Suche mit Strg+F)
+- `ui/render.js`: Markdown mit Formeln (marked, KaTeX, DOMPurify), gemeinsam für Reader und Lernzettel
+- `ui/export.html`, `export.js`, `export.css`, `sheet.css`: Lernzettel-Fenster. `sheet.css` bestimmt das Aussehen auch beim Drucken und in der gespeicherten HTML-Datei (Schriften als data:-URLs eingebettet).
+- `ui/organize.html`, `organize.js`, `organize.css`: Seiten organisieren und zusammenfügen (Ziehen mit Mausereignissen, nicht HTML5-Drag&Drop, weil Tauri das unter Windows abfängt). Gespeichert wird über `pdfium_host::assemble` immer als neue Datei.
 - `ui/bridge.js`: Verbindung zum Rust-Teil. Ein einziger Befehl `api(path, body)`. Dazu kommt das eigene Protokoll `pdftutor://` (PDF-Daten unter `doc/<id>/pdf`, Vorschaubilder unter `thumb/<id>`).
 - `src-tauri/src/api.rs`: verteilt die `api`-Aufrufe (`/api/library…`, `/api/doc/<id>/…`, `/api/settings`, `/api/update/…`)
 - `annots.rs`: Lesen und Schreiben der PDF-Anmerkungen mit lopdf.
@@ -32,5 +35,5 @@ Datenordner: `%LOCALAPPDATA%\PDF-Tutor-Daten` (Windows) bzw. `~/.local/share/pdf
 ## Testen
 
 - `cargo test` in `src-tauri` (Schreiben in normale und verschlüsselte PDFs, fremde Anmerkungen, Löschen). Die Testdateien liegen in `PT_TESTDIR`.
-- Ende-zu-Ende-Tests laufen mit `tauri-driver` und WebKitWebDriver unter Linux/Xvfb.
+- Ende-zu-Ende-Tests laufen mit `tauri-driver` und WebKitWebDriver unter Linux/Xvfb. Mit `PDFTUTOR_TEST_SAVE_DIR` speichert das Programm ohne Dialog in diesen Ordner (nur für Tests).
 - Gegenprobe der Erscheinungsbilder mit einem zweiten Renderer (z. B. PyMuPDF), auch für gedrehte Seiten.

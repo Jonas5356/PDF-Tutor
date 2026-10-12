@@ -17,6 +17,9 @@
 <header id="toolbar">
   <div class="tb-left">
     <a id="homeBtn" class="tb-btn home-btn" href="index.html" title="Zur Bibliothek">‹ Bibliothek</a>
+    <button id="sidebarBtn" class="tb-btn" title="Seitenleiste: Inhalt, Seiten, Notizen">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg>
+    </button>
     <span id="bookTitle" class="book-title">Lade …</span>
   </div>
   <div class="tb-center">
@@ -32,6 +35,10 @@
     <span id="zoomVal" class="zoom-val">100 %</span>
     <button id="zoomIn" class="tb-btn" title="Vergrößern">+</button>
     <button id="zoomFit" class="tb-btn text" title="Auf Breite einpassen">Breite</button>
+    <span class="sep"></span>
+    <button id="findBtn" class="tb-btn" title="Im Dokument suchen (Strg+F)">
+      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.2 10.2l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
   </div>
   <div class="tb-right">
     <span id="docStatus" class="muted doc-status"></span>
@@ -43,12 +50,37 @@
     <select id="modelSelect" class="tb-select" title="Modell für neue Fragen"></select>
     <button id="stickyTool" class="tb-btn text tool" title="Haftnotiz setzen: danach auf die gewünschte Stelle der Seite klicken">
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M2.5 3.5h15v10h-8l-4.5 3.5 1-3.5H2.5z" fill="#ffd84d" stroke="#555" stroke-width="1.2" stroke-linejoin="round"/><path d="M5.5 7h9M5.5 10h6" stroke="#555" stroke-width="1.2"/></svg>
-      Notiz</button>
+      <span class="lbl">Notiz</span></button>
     <button id="undoBtn" class="tb-btn" title="Nichts rückgängig zu machen" disabled>↶</button>
     <button id="collapseAll" class="tb-btn text" title="Alle Notizen einklappen">Einklappen</button>
+    <button id="moreBtn" class="tb-btn" title="Weitere Funktionen">⋯</button>
   </div>
 </header>
 <div id="banner" class="banner" hidden></div>
+<div id="main">
+<aside id="sidebar" hidden>
+  <div class="sb-tabs">
+    <button class="sb-tab" data-tab="toc">Inhalt</button>
+    <button class="sb-tab" data-tab="thumbs">Seiten</button>
+    <button class="sb-tab" data-tab="notes">Notizen</button>
+  </div>
+  <div class="sb-pane" id="sbToc" data-tab="toc"></div>
+  <div class="sb-pane" id="sbThumbs" data-tab="thumbs" hidden></div>
+  <div class="sb-pane notes-pane" id="sbNotes" data-tab="notes" hidden>
+    <div class="sb-filter">
+      <div id="sbNoteColors" class="sb-colors"></div>
+      <select id="sbNoteKind" class="tb-select">
+        <option value="all">Alle</option>
+        <option value="comment">mit Kommentar</option>
+        <option value="claude">mit Claude</option>
+        <option value="plain">nur Markierungen</option>
+        <option value="sticky">Haftnotizen</option>
+      </select>
+    </div>
+    <div id="sbNoteCount" class="sb-count"></div>
+    <div id="sbNoteList"></div>
+  </div>
+</aside>
 <main id="scroller">
   <div id="content">
     <div id="pages"></div>
@@ -57,6 +89,14 @@
     </aside>
   </div>
 </main>
+<div id="findBar" class="findbar" hidden>
+  <input id="findInput" type="text" placeholder="Im Dokument suchen …" autocomplete="off" spellcheck="false">
+  <span id="findCount" class="find-count"></span>
+  <button id="findPrev" class="fb" title="Vorheriger Treffer (Umschalt+Enter)">↑</button>
+  <button id="findNext" class="fb" title="Nächster Treffer (Enter)">↓</button>
+  <button id="findClose" class="fb" title="Schließen (Esc)">×</button>
+</div>
+</div>
 <div id="selBar" class="floatbar" hidden>
   <span class="swatches"></span>
   <span class="fsep"></span>
@@ -79,6 +119,11 @@
   <button class="fb del" data-act="delete" title="Löschen (Strg+Z macht es rückgängig)">
     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
   </button>
+</div>
+<div id="moreMenu" class="menu" hidden>
+  <button data-act="export">Lernzettel erstellen …</button>
+  <button data-act="organize">Seiten organisieren / zusammenfügen …</button>
+  <button data-act="collapse">Alle Notizen einklappen</button>
 </div>
 <div id="toast" class="toast" hidden><span class="txt"></span><button class="act" hidden></button></div>
 <script type="module" src="app.js"></script>
