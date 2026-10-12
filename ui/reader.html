@@ -41,6 +41,10 @@
       <option value="suche">Kontext: Suche</option>
     </select>
     <select id="modelSelect" class="tb-select" title="Modell für neue Fragen"></select>
+    <button id="stickyTool" class="tb-btn text tool" title="Haftnotiz setzen: danach auf die gewünschte Stelle der Seite klicken">
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M2.5 3.5h15v10h-8l-4.5 3.5 1-3.5H2.5z" fill="#ffd84d" stroke="#555" stroke-width="1.2" stroke-linejoin="round"/><path d="M5.5 7h9M5.5 10h6" stroke="#555" stroke-width="1.2"/></svg>
+      Notiz</button>
+    <button id="undoBtn" class="tb-btn" title="Nichts rückgängig zu machen" disabled>↶</button>
     <button id="collapseAll" class="tb-btn text" title="Alle Notizen einklappen">Einklappen</button>
   </div>
 </header>
@@ -49,11 +53,34 @@
   <div id="content">
     <div id="pages"></div>
     <aside id="notes">
-      <div id="notesEmpty" class="notes-empty">Markiere eine Stelle im Text und klicke auf <b>Frage stellen</b>.</div>
+      <div id="notesEmpty" class="notes-empty">Markiere eine Stelle im Text, um sie hervorzuheben, zu kommentieren oder <b>Claude zu fragen</b>. Mit <b>Notiz</b> setzt du eine Haftnotiz an eine beliebige Stelle.</div>
     </aside>
   </div>
 </main>
-<button id="askBtn" class="ask-btn" hidden>Frage stellen</button>
+<div id="selBar" class="floatbar" hidden>
+  <span class="swatches"></span>
+  <span class="fsep"></span>
+  <button class="fb kind" data-kind="Underline" title="Unterstreichen (in der zuletzt gewählten Farbe)"><u>U</u></button>
+  <button class="fb kind" data-kind="StrikeOut" title="Durchstreichen (in der zuletzt gewählten Farbe)"><s>S</s></button>
+  <span class="fsep"></span>
+  <button class="fb" data-act="comment">Kommentar</button>
+  <button class="fb primary" data-act="ask">Claude fragen</button>
+</div>
+<div id="markBar" class="floatbar" hidden>
+  <span class="swatches"></span>
+  <span class="fsep"></span>
+  <button class="fb kind" data-kind="Highlight" title="Hervorheben"><span class="hl-ico">ab</span></button>
+  <button class="fb kind" data-kind="Underline" title="Unterstreichen"><u>U</u></button>
+  <button class="fb kind" data-kind="StrikeOut" title="Durchstreichen"><s>S</s></button>
+  <span class="fsep"></span>
+  <button class="fb" data-act="comment">Kommentar</button>
+  <button class="fb" data-act="ask">Claude fragen</button>
+  <span class="fsep"></span>
+  <button class="fb del" data-act="delete" title="Löschen (Strg+Z macht es rückgängig)">
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+  </button>
+</div>
+<div id="toast" class="toast" hidden><span class="txt"></span><button class="act" hidden></button></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

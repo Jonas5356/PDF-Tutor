@@ -1,6 +1,7 @@
 //! Schnittstelle für die Oberfläche: ein Befehl `api(path, body)` mit denselben Pfaden
 //! wie in Version 3, damit die Oberfläche weitgehend gleich bleiben konnte.
 
+use crate::annots::Kind;
 use crate::claude;
 use crate::state::{ApiError, Ctx};
 use crate::util::write_atomic;
@@ -16,6 +17,15 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn bad(s: impl Into<String>) -> ApiError {
     ApiError::Bad(s.into())
+}
+
+const DEFAULT_COLOR: [f32; 3] = [1.0, 0.85, 0.0];
+
+/// Farbe als [r, g, b] mit Werten von 0 bis 1.
+fn color_of(body: &Value) -> Option<[f32; 3]> {
+    let a = body["color"].as_array().filter(|a| a.len() == 3)?;
+    let v: Vec<f32> = a.iter().filter_map(|x| x.as_f64()).map(|x| x.clamp(0.0, 1.0) as f32).collect();
+    (v.len() == 3).then(|| [v[0], v[1], v[2]])
 }
 
 fn s<'a>(body: &'a Value, key: &str) -> &'a str {
@@ -86,8 +96,29 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                         Some([a[0].as_f64()? as f32, a[1].as_f64()? as f32, a[2].as_f64()? as f32, a[3].as_f64()? as f32])
                     })
                     .collect();
-                Ok(doc.create_note(ctx, page, rects, s(body, "text"), s(body, "question"))?)
+                let kind = match body["kind"].as_str() {
+                    None => Kind::Highlight,
+                    Some(k) => Kind::from_name(k).filter(|k| *k != Kind::Note).ok_or_else(|| bad("Unbekannte Art"))?,
+                };
+                let color = color_of(body).unwrap_or(DEFAULT_COLOR);
+                Ok(doc.create_note(ctx, page, kind, rects, color, s(body, "text"), s(body, "comment"), s(body, "question"))?)
             }
+            "notes/sticky" => {
+                let page = body["page"].as_u64().ok_or_else(|| bad("Seite fehlt"))? as u32;
+                let p = body["point"].as_array().filter(|a| a.len() == 2).ok_or_else(|| bad("Position fehlt"))?;
+                let at = (p[0].as_f64().unwrap_or(0.0) as f32, p[1].as_f64().unwrap_or(0.0) as f32);
+                Ok(doc.create_sticky(ctx, page, at, color_of(body).unwrap_or(DEFAULT_COLOR), s(body, "text"))?)
+            }
+            "notes/style" => {
+                let kind = match body["kind"].as_str() {
+                    None => None,
+                    Some(k) => Some(Kind::from_name(k).ok_or_else(|| bad("Unbekannte Art"))?),
+                };
+                Ok(doc.restyle(ctx, s(body, "id"), kind, color_of(body))?)
+            }
+            "notes/comment" => Ok(doc.comment(ctx, s(body, "id"), s(body, "text"))?),
+            "notes/edit" => Ok(doc.edit_message(ctx, s(body, "id"), s(body, "msg"), s(body, "text"))?),
+            "undo" => Ok(doc.undo(ctx)?),
             "notes/delete" => {
                 doc.delete_note(ctx, s(body, "id"))?;
                 Ok(json!({"ok": true}))

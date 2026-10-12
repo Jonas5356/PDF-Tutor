@@ -60,22 +60,55 @@ button { font: inherit; color: inherit; }
 .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
 .textLayer.selecting .endOfContent { top: 0; }
 
-/* ---------- Frage-Knopf ---------- */
-.ask-btn {
-  position: fixed; z-index: 50; background: var(--accent); color: #fff; border: 0; border-radius: 16px;
-  padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.2);
+/* ---------- Leisten an der Auswahl bzw. an einer Markierung ---------- */
+.floatbar {
+  position: fixed; z-index: 50; display: flex; align-items: center; gap: 4px; padding: 5px 6px;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.08); font-size: 13px; user-select: none;
 }
-.ask-btn:hover { filter: brightness(1.08); }
+.floatbar[hidden] { display: none; }
+.floatbar .swatches { display: flex; gap: 4px; padding: 0 2px; }
+.floatbar .swatches[hidden] { display: none; }
+.sw { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); cursor: pointer; padding: 0; transition: transform .1s; }
+.sw:hover { transform: scale(1.15); }
+.sw.on { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent); }
+.fsep { width: 1px; height: 20px; background: var(--line); margin: 0 3px; }
+.fb { border: 0; background: none; border-radius: 6px; height: 28px; min-width: 28px; padding: 0 8px; cursor: pointer; font-size: 13px; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
+.fb:hover { background: #eef1f4; }
+.fb[hidden] { display: none; }
+.fb.kind { font-family: var(--font-read); font-size: 15px; padding: 0 6px; }
+.fb.kind.on { background: #e3eaf1; box-shadow: inset 0 0 0 1px var(--accent); }
+.fb.primary { background: var(--accent); color: #fff; font-weight: 600; }
+.fb.primary:hover { filter: brightness(1.08); background: var(--accent); }
+.fb.del { color: var(--err); }
+.hl-ico { background: #ffd84d; padding: 0 3px; border-radius: 2px; line-height: 1.2; }
+
+/* Haftnotiz-Werkzeug */
+.tb-btn.tool { display: inline-flex; align-items: center; gap: 5px; }
+.tb-btn.on { background: #e3eaf1; border-color: var(--accent); }
+.tb-btn:disabled { opacity: .45; cursor: default; }
+#pages.placing .textLayer { pointer-events: none; }
+#pages.placing .page { cursor: crosshair; }
+.hl.sticky-draft { background: rgba(110, 160, 255, .35); border: 2px dashed #6ea0ff; border-radius: 4px; }
+
+/* Hinweis unten (z. B. „Gelöscht – Rückgängig“) */
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60;
+  background: #2b3440; color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 13.5px;
+  display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.25); max-width: 70vw;
+}
+.toast[hidden] { display: none; }
+.toast .act { background: none; border: 0; color: #9cc8ff; font-weight: 600; cursor: pointer; padding: 0; }
 
 /* ---------- Notizen ---------- */
 .notes-empty { color: var(--muted); font-size: 14px; padding: 8px 4px; line-height: 1.5; }
 .card {
   position: absolute; left: 0; right: 0; background: var(--paper); border: 1px solid var(--line);
-  border-left: 3px solid #e2b13c; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  border-left: 4px solid var(--note-color, #e2b13c); border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
   font-size: 14.5px; line-height: 1.55; transition: top .12s ease, box-shadow .15s;
 }
-.card.active { box-shadow: 0 2px 14px rgba(0,0,0,.14); border-left-color: var(--accent); z-index: 3; }
-.card.draft { border-left-color: #6ea0ff; z-index: 4; }
+.card.active { box-shadow: 0 2px 14px rgba(0,0,0,.14), 0 0 0 1px rgba(47,93,138,.35); z-index: 3; }
+.card.draft { z-index: 4; }
 .card-head { display: flex; align-items: baseline; gap: 8px; padding: 8px 8px 6px 12px; cursor: pointer; }
 .card-head .pg { font-weight: 600; font-size: 12px; color: var(--accent); white-space: nowrap; }
 .card-head .quote { flex: 1; min-width: 0; color: var(--muted); font-style: italic; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -84,7 +117,17 @@ button { font: inherit; color: inherit; }
 .card-body { padding: 0 12px 10px; }
 .msg { margin: 6px 0; overflow-wrap: anywhere; }
 .msg.q { font-weight: 600; }
-.msg.q::before { content: "Frage"; display: block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.msg.q::before, .msg.c::before { content: "Frage"; display: block; font-family: var(--font); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.msg.c::before { content: "Kommentar"; }
+.msg.c { font-weight: 400; font-family: var(--font-read); font-size: 15px; }
+.msg.c p, .msg.q p { margin: .2em 0; }
+.msg :is(.q, .c) { position: relative; }
+.msg.q, .msg.c { position: relative; }
+.msg .edit { position: absolute; top: 0; right: 0; font-size: 13px; opacity: 0; transition: opacity .12s; }
+.msg:hover .edit { opacity: 1; }
+.msg.editing::before { display: none; }
+.msg.editing .row { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 6px; font-weight: 400; }
+.msg.editing .hint { margin-right: auto; font-size: 11.5px; color: var(--muted); }
 .msg.a { font-family: var(--font-read); font-size: 15px; }
 .msg.a p { margin: .45em 0; }
 .msg.a :is(ul, ol) { padding-left: 1.3em; margin: .4em 0; }
@@ -98,7 +141,7 @@ button { font: inherit; color: inherit; }
 /* Gleichungsnummern (\tag) nicht über die Formel legen: KaTeX positioniert sie
    absolut am rechten Rand, was in der schmalen Spalte zu Überlappungen führt */
 .msg .katex-display > .katex > .katex-html > .tag { position: static; display: inline-block; margin-left: 1em; }
-.msg.q + .msg.q, .meta + .msg.q, .msg.err + .msg.q { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line); }
+:is(.msg.q, .msg.c) + :is(.msg.q, .msg.c), .meta + :is(.msg.q, .msg.c), .msg.err + :is(.msg.q, .msg.c) { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .meta { font-size: 11.5px; color: var(--muted); margin-top: -2px; }
 .msg.pending { color: var(--muted); display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
 .msg.err { color: var(--err); font-size: 13.5px; white-space: pre-wrap; }

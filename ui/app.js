@@ -6,7 +6,6 @@ const $ = (id) => document.getElementById(id);
 const scroller = $("scroller");
 const pagesEl = $("pages");
 const notesEl = $("notes");
-const askBtn = $("askBtn");
 
 const S = {
   info: null,
@@ -18,7 +17,11 @@ const S = {
   notes: [],
   draft: null,      // {page, rects, text}
   activeId: null,
-  pendingSel: null, // Auswahl, für die der Frage-Knopf angezeigt wird
+  pendingSel: null, // Auswahl, für die die Leiste angezeigt wird
+  menuId: null,     // Notiz, deren Menü offen ist
+  compose: null,    // {id, mode}: Eingabefeld einer Notiz für Kommentar ("comment") oder Frage ("ask")
+  tool: null,       // "sticky": nächster Klick setzt eine Haftnotiz
+  undo: null,       // Beschreibung des Schritts, den Strg+Z zurücknimmt
 };
 
 // ---------------------------------------------------------------------------
@@ -102,6 +105,8 @@ async function init() {
   const notesDoc = await api("/api/notes");
   S.notes = notesDoc.notes || [];
   S.version = notesDoc.version;
+  S.undo = notesDoc.undo || null;
+  updateUndo();
   const st = notesDoc.state || {};
   S.model = st.model || S.info.defaultModel;
   sel.value = S.model;
@@ -206,6 +211,8 @@ async function refreshNotes(forceReload = false) {
   const doc = await api("/api/notes");
   const changed = doc.version !== S.version;
   S.version = doc.version;
+  S.undo = doc.undo || null;
+  updateUndo();
   S.notes = (doc.notes || []).map(prepNote);
   if (changed || forceReload) await reloadPdf();
   renderHighlights();
@@ -349,7 +356,7 @@ function updateCurrentPage() {
 
 let scrollRaf = 0;
 scroller.addEventListener("scroll", () => {
-  hideAskBtn();
+  hideBars();
   if (scrollRaf) return;
   scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; updateCurrentPage(); });
 });
@@ -410,7 +417,7 @@ function pollStatus() {
   }, 2000);
 }
 $("collapseAll").onclick = () => {
-  for (const n of S.notes) {
+  for (const n of S.notes.filter(hasCard)) {
     if (!n.collapsed && !isPending(n)) { n.collapsed = true; api("/api/notes/update", { id: n.id, collapsed: true }).catch(() => {}); }
   }
   renderAllCards();
@@ -423,25 +430,85 @@ function showBanner(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Markieren
+// Farben und Arten
 // ---------------------------------------------------------------------------
 
+// Hervorhebungen in hellen Tönen, Linien (Unter-/Durchstreichen) kräftiger
+const COLORS = [
+  { name: "Gelb",   hl: [1, 0.85, 0],      line: [0.9, 0.68, 0] },
+  { name: "Grün",   hl: [0.49, 0.85, 0.39], line: [0.18, 0.62, 0.22] },
+  { name: "Blau",   hl: [0.45, 0.75, 1],    line: [0.15, 0.45, 0.9] },
+  { name: "Rosa",   hl: [1, 0.56, 0.75],    line: [0.88, 0.2, 0.5] },
+  { name: "Orange", hl: [1, 0.65, 0.25],    line: [0.95, 0.45, 0.05] },
+];
+const KIND_NAMES = { Highlight: "Hervorhebung", Underline: "Unterstreichung", StrikeOut: "Durchstreichung", Squiggly: "Markierung", Text: "Notiz", FreeText: "Textfeld" };
+const colorFor = (i, kind) => (kind === "Highlight" || kind === "Text" ? COLORS[i].hl : COLORS[i].line);
+const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
+
+function colorIndex(c) {
+  if (!c) return 0;
+  let best = 0, bd = Infinity;
+  COLORS.forEach((col, i) => {
+    for (const v of [col.hl, col.line]) {
+      const d = v.reduce((s, x, k) => s + (x - c[k]) ** 2, 0);
+      if (d < bd) { bd = d; best = i; }
+    }
+  });
+  return best;
+}
+
+let lastColor = 0;
+try { lastColor = Math.min(4, Math.max(0, +localStorage.getItem("pdftutor-color") || 0)); } catch {}
+function rememberColor(i) {
+  lastColor = i;
+  try { localStorage.setItem("pdftutor-color", String(i)); } catch {}
+}
+
+// Farbpunkte in einer Leiste aufbauen
+function buildSwatches(el, onPick) {
+  el.replaceChildren();
+  COLORS.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "sw";
+    b.dataset.i = i;
+    b.title = `${c.name} hervorheben`;
+    b.style.background = css(c.hl);
+    b.addEventListener("click", () => onPick(i));
+    el.append(b);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Markieren: Leiste an der Auswahl
+// ---------------------------------------------------------------------------
+
+const selBar = $("selBar");
+const markBar = $("markBar");
+for (const bar of [selBar, markBar]) bar.addEventListener("mousedown", (e) => e.preventDefault()); // Auswahl behalten
+
+buildSwatches(selBar.querySelector(".swatches"), (i) => { rememberColor(i); markSelection("Highlight", i); });
+selBar.querySelectorAll("[data-kind]").forEach((b) => b.addEventListener("click", () => markSelection(b.dataset.kind, lastColor)));
+selBar.querySelector('[data-act="comment"]').addEventListener("click", () => startDraft("comment"));
+selBar.querySelector('[data-act="ask"]').addEventListener("click", () => startDraft("ask"));
+
 pagesEl.addEventListener("mousedown", (e) => {
+  if (S.tool === "sticky") return;
   const tl = e.target.closest(".textLayer");
   if (tl) tl.classList.add("selecting");
-  hideAskBtn();
+  hideBars();
 });
 
 document.addEventListener("mouseup", (e) => {
   document.querySelectorAll(".textLayer.selecting").forEach((t) => t.classList.remove("selecting"));
-  if (e.target === askBtn || e.target.closest("#notes")) return;
+  if (S.tool === "sticky") return;
+  if (e.target.closest(".floatbar") || e.target.closest("#notes") || e.target.closest("#toolbar") || e.target.closest("#toast")) return;
   setTimeout(() => handleSelection(e), 0);
 });
 
 function handleSelection(e) {
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-    hitTestHighlight(e.clientX, e.clientY);
+    if (e.target.closest("#pages")) hitTestNote(e.clientX, e.clientY);
     return;
   }
   const node = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
@@ -452,13 +519,21 @@ function handleSelection(e) {
   if (!rects.length || !text) return;
   S.pendingSel = { rects, text, page: rects[0].page };
   const last = [...range.getClientRects()].filter((r) => r.width > 0).pop() || range.getBoundingClientRect();
-  askBtn.style.left = `${Math.min(window.innerWidth - 130, last.right + 6)}px`;
-  askBtn.style.top = `${Math.min(window.innerHeight - 40, last.bottom + 6)}px`;
-  askBtn.hidden = false;
+  showBar(selBar, last.right, last.bottom + 8);
 }
 
-function hideAskBtn() {
-  askBtn.hidden = true;
+function showBar(bar, x, y) {
+  hideBars();
+  bar.hidden = false;
+  const w = bar.offsetWidth, h = bar.offsetHeight;
+  bar.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, x - w / 2))}px`;
+  bar.style.top = `${y + h > window.innerHeight - 8 ? Math.max(8, y - h - 40) : y}px`;
+}
+
+function hideBars() {
+  selBar.hidden = true;
+  markBar.hidden = true;
+  S.menuId = null;
 }
 
 function selectionRects(range) {
@@ -497,24 +572,33 @@ function selectionRects(range) {
   return merged.map((r) => ({ ...r, x: +r.x.toFixed(5), y: +r.y.toFixed(5), w: +r.w.toFixed(5), h: +r.h.toFixed(5) }));
 }
 
-function hitTestHighlight(x, y) {
-  for (const el of document.querySelectorAll(".hl:not(.draft)")) {
-    const b = el.getBoundingClientRect();
-    if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) {
-      const note = S.notes.find((n) => n.id === el.dataset.id);
-      if (note) openNote(note, true);
-      return;
-    }
+// Auswahl sofort markieren (Hervorheben, Unterstreichen, Durchstreichen)
+async function markSelection(kind, ci) {
+  const sel = S.pendingSel;
+  if (!sel) return;
+  S.pendingSel = null;
+  hideBars();
+  window.getSelection().removeAllRanges();
+  try {
+    const rects = sel.rects.filter((r) => r.page === sel.page).map(pdfRect);
+    await api("/api/notes/create", { page: sel.page, kind, color: colorFor(ci, kind), pdfRects: rects, text: sel.text });
+    await afterChange();
+  } catch (e) {
+    showToast("Konnte nicht markieren: " + e.message);
   }
 }
 
-askBtn.addEventListener("mousedown", (e) => e.preventDefault()); // Auswahl nicht verlieren
-askBtn.addEventListener("click", () => {
+// Kommentar oder Frage zur Auswahl: zuerst eine Entwurfskarte
+function startDraft(mode) {
   if (!S.pendingSel) return;
-  S.draft = S.pendingSel;
+  S.draft = { ...S.pendingSel, mode, color: lastColor };
   S.pendingSel = null;
-  hideAskBtn();
+  hideBars();
   window.getSelection().removeAllRanges();
+  showDraft();
+}
+
+function showDraft() {
   renderHighlights();
   renderAllCards();
   const ta = notesEl.querySelector(".card.draft textarea");
@@ -524,10 +608,111 @@ askBtn.addEventListener("click", () => {
       ta.closest(".card")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }));
   }
+}
+
+// ---------------------------------------------------------------------------
+// Vorhandene Markierung anklicken: Menü
+// ---------------------------------------------------------------------------
+
+buildSwatches(markBar.querySelector(".swatches"), (i) => {
+  const n = S.notes.find((x) => x.id === S.menuId);
+  if (!n) return;
+  rememberColor(i);
+  restyle(n, null, i);
+});
+markBar.querySelectorAll("[data-kind]").forEach((b) => b.addEventListener("click", () => {
+  const n = S.notes.find((x) => x.id === S.menuId);
+  if (n && b.dataset.kind !== n.subtype) restyle(n, b.dataset.kind, colorIndex(n.color));
+}));
+markBar.querySelector('[data-act="comment"]').addEventListener("click", () => composeOn(S.menuId, "comment"));
+markBar.querySelector('[data-act="ask"]').addEventListener("click", () => composeOn(S.menuId, "ask"));
+markBar.querySelector('[data-act="delete"]').addEventListener("click", () => {
+  const n = S.notes.find((x) => x.id === S.menuId);
+  hideBars();
+  if (n) deleteNote(n);
+});
+
+function hitTestNote(x, y) {
+  // Haftnotizen liegen oben, daher zuerst
+  const els = [...document.querySelectorAll(".hl:not(.draft)")].sort((a, b) => (b.classList.contains("sticky") ? 1 : 0) - (a.classList.contains("sticky") ? 1 : 0));
+  for (const el of els) {
+    const b = el.getBoundingClientRect();
+    if (x >= b.left - 2 && x <= b.right + 2 && y >= b.top - 2 && y <= b.bottom + 2) {
+      const note = S.notes.find((n) => n.id === el.dataset.id);
+      if (note) openMenu(note, x, y);
+      return;
+    }
+  }
+  hideBars();
+}
+
+function openMenu(n, x, y) {
+  const editable = KIND_NAMES[n.subtype] && n.subtype !== "Squiggly" && n.subtype !== "FreeText";
+  markBar.querySelectorAll("[data-kind]").forEach((b) => {
+    b.hidden = n.subtype === "Text" || !editable;
+    b.classList.toggle("on", b.dataset.kind === n.subtype);
+  });
+  markBar.querySelector(".swatches").hidden = !editable;
+  markBar.querySelectorAll(".sw").forEach((b) => b.classList.toggle("on", +b.dataset.i === colorIndex(n.color)));
+  // nicht scrollen: das würde das Menü gleich wieder schließen
+  if (hasCard(n)) openNote(n, false);
+  else { S.activeId = n.id; renderHighlights(); }
+  showBar(markBar, x, y + 14);
+  S.menuId = n.id;
+}
+
+async function restyle(n, kind, ci) {
+  const newKind = kind || n.subtype;
+  try {
+    await api("/api/notes/style", { id: n.id, kind: kind || undefined, color: colorFor(ci, newKind) });
+    hideBars();
+    await afterChange();
+  } catch (e) {
+    showToast("Ändern fehlgeschlagen: " + e.message);
+  }
+}
+
+// Karte einer Notiz öffnen und Eingabefeld für Kommentar oder Frage bereitstellen
+function composeOn(id, mode) {
+  const n = S.notes.find((x) => x.id === id);
+  hideBars();
+  if (!n) return;
+  S.compose = { id, mode };
+  n.collapsed = false;
+  openNote(n, true);
+  requestAnimationFrame(() => notesEl.querySelector(`.card[data-id="${id}"] .composer textarea`)?.focus({ preventScroll: true }));
+}
+
+// ---------------------------------------------------------------------------
+// Haftnotizen
+// ---------------------------------------------------------------------------
+
+$("stickyTool").onclick = () => setTool(S.tool === "sticky" ? null : "sticky");
+
+function setTool(t) {
+  S.tool = t;
+  $("stickyTool").classList.toggle("on", t === "sticky");
+  pagesEl.classList.toggle("placing", t === "sticky");
+  hideBars();
+}
+
+pagesEl.addEventListener("click", (e) => {
+  if (S.tool !== "sticky") return;
+  const div = e.target.closest(".page");
+  if (!div) return;
+  const p = S.pages[+div.dataset.num - 1];
+  const b = div.getBoundingClientRect();
+  const nx = (e.clientX - b.left) / b.width, ny = (e.clientY - b.top) / b.height;
+  const [px, py] = p.vp1.convertToPdfPoint(nx * p.vp1.width, ny * p.vp1.height);
+  const half = 10;
+  const r = normRect(p.num, [px - half, py - half, px + half, py + half]);
+  setTool(null);
+  S.draft = { mode: "sticky", page: p.num, rects: [r], text: "", point: [+px.toFixed(2), +py.toFixed(2)], color: lastColor };
+  showDraft();
 });
 
 // ---------------------------------------------------------------------------
-// Markierungen zeichnen
+// Markierungen zeichnen (nur Klickflächen; die Markierungen selbst stehen im PDF)
 // ---------------------------------------------------------------------------
 
 function renderHighlights() {
@@ -543,8 +728,14 @@ function renderHighlights() {
     });
     p.hl.append(d);
   };
-  for (const n of S.notes) for (const r of n.rects) add(r, n.id === S.activeId ? "active" : "", n.id);
-  if (S.draft) for (const r of S.draft.rects) add(r, "draft");
+  for (const n of S.notes) {
+    const cls = [n.id === S.activeId ? "active" : "", n.subtype === "Text" ? "sticky" : ""].join(" ");
+    for (const r of n.rects) add(r, cls, n.id);
+  }
+  if (S.draft) {
+    if (S.draft.mode === "sticky") add(S.draft.rects[0], "draft sticky-draft");
+    else for (const r of S.draft.rects) add(r, "draft");
+  }
 }
 
 function setHlClass(id, cls, on) {
@@ -552,10 +743,11 @@ function setHlClass(id, cls, on) {
 }
 
 // ---------------------------------------------------------------------------
-// Notizkarten
+// Notizkarten (nur für Notizen mit Text; reine Markierungen bekommen keine Karte)
 // ---------------------------------------------------------------------------
 
 const isPending = (n) => (n.thread || []).some((m) => m.status === "pending");
+const hasCard = (n) => (n.thread || []).length > 0 || n.subtype === "Text" || n.subtype === "FreeText" || S.compose?.id === n.id;
 
 function anchorTop(item) {
   const r0 = item.rects.filter((r) => r.page === item.page);
@@ -566,18 +758,46 @@ function anchorTop(item) {
   return p.div.offsetTop + minY * p.div.offsetHeight;
 }
 
+// Begonnene Eingaben über ein Neuzeichnen der Karten hinweg erhalten
+function saveInputs() {
+  const out = {};
+  notesEl.querySelectorAll(".card textarea").forEach((ta) => {
+    const key = (ta.closest(".card").dataset.id || "draft") + "|" + (ta.dataset.msg || "composer");
+    out[key] = { v: ta.value, focus: document.activeElement === ta, s: ta.selectionStart, e: ta.selectionEnd };
+  });
+  return out;
+}
+
+function restoreInputs(saved) {
+  notesEl.querySelectorAll(".card textarea").forEach((ta) => {
+    const key = (ta.closest(".card").dataset.id || "draft") + "|" + (ta.dataset.msg || "composer");
+    const x = saved[key];
+    if (!x || (!x.v && !x.focus)) return;
+    ta.value = x.v;
+    ta.dispatchEvent(new Event("input"));
+    if (x.focus) { ta.focus({ preventScroll: true }); try { ta.setSelectionRange(x.s, x.e); } catch {} }
+  });
+}
+
 function renderAllCards() {
+  const saved = saveInputs();
   notesEl.querySelectorAll(".card").forEach((c) => c.remove());
-  $("notesEmpty").hidden = S.notes.length > 0 || !!S.draft;
-  for (const n of S.notes) notesEl.append(buildCard(n));
+  const withCard = S.notes.filter(hasCard);
+  $("notesEmpty").hidden = withCard.length > 0 || !!S.draft;
+  for (const n of withCard) notesEl.append(buildCard(n));
   if (S.draft) notesEl.append(buildDraftCard());
+  restoreInputs(saved);
   layoutNotes();
 }
 
 function refreshCard(note) {
+  const saved = saveInputs();
   const old = notesEl.querySelector(`.card[data-id="${note.id}"]`);
+  if (!hasCard(note)) { old?.remove(); layoutNotes(); return; }
   const fresh = buildCard(note);
   if (old) old.replaceWith(fresh); else notesEl.append(fresh);
+  restoreInputs(saved);
+  $("notesEmpty").hidden = true;
   layoutNotes();
 }
 
@@ -585,21 +805,25 @@ function buildCard(n) {
   const card = document.createElement("div");
   card.className = "card" + (n.collapsed ? " collapsed" : "") + (n.id === S.activeId ? " active" : "");
   card.dataset.id = n.id;
+  card.style.setProperty("--note-color", css(n.color || COLORS[0].hl));
   const thread = n.thread || [];
-  const kind = { Highlight: "Markierung", Underline: "Unterstreichung", StrikeOut: "Durchstreichung", Squiggly: "Markierung", Text: "Notiz", FreeText: "Textfeld" }[n.subtype] || "Anmerkung";
+  const kind = KIND_NAMES[n.subtype] || "Anmerkung";
   const quote = n.text ? (n.text.length > 90 ? n.text.slice(0, 90) + " …" : n.text) : "";
+  // Nutzer-Nachricht, auf die Claude geantwortet hat (oder antwortet), ist eine Frage, sonst ein Kommentar
+  const isQuestion = (i) => thread[i + 1] && thread[i + 1].role === "assistant";
 
   let body = "";
   if (n.collapsed) {
     const q = thread.find((m) => m.role === "user");
     const a = [...thread].reverse().find((m) => m.role === "assistant" && m.status === "ok");
-    body += q ? `<div class="msg q">${esc(q.text)}</div>` : "";
+    body += q ? `<div class="msg ${isQuestion(thread.indexOf(q)) ? "q" : "c"}">${esc(q.text)}</div>` : "";
     body += a ? `<div class="preview">${esc(a.text.replace(/[#*$`\\]/g, "").slice(0, 300))}</div>` : "";
   } else {
-    for (const m of thread) {
+    thread.forEach((m, i) => {
       if (m.role === "user") {
         const who = m.author && n.own === false ? `<span class="who">${esc(m.author)}</span>` : "";
-        body += `<div class="msg q">${who}${renderMD(m.text)}</div>`;
+        const edit = m.id && !isPending(n) ? `<button class="icon edit" data-msg="${esc(m.id)}" title="Bearbeiten">✎</button>` : "";
+        body += `<div class="msg ${isQuestion(i) ? "q" : "c"}" data-msg="${esc(m.id || "")}">${edit}${who}${renderMD(m.text)}</div>`;
       } else if (m.status === "pending") {
         const start = Date.parse(m.time) || Date.now();
         body += `<div class="msg pending"><span class="spinner"></span>Claude (${esc(modelLabel(m.model))}) denkt nach … <span class="elapsed" data-start="${start}"></span></div>`;
@@ -611,11 +835,16 @@ function buildCard(n) {
         const tip = u ? `Eingabe ${fmtNum(u.input_tokens)} · aus Cache ${fmtNum(u.cache_read_input_tokens)} · in Cache geschrieben ${fmtNum(u.cache_creation_input_tokens)} · Ausgabe ${fmtNum(u.output_tokens)} Tokens` : "";
         body += `<div class="meta" title="${esc(tip)}">${esc(modelLabel(m.model))}${m.mode ? ` · ${modeName(m.mode)}` : ""}${m.seconds ? ` · ${m.seconds} s` : ""}${m.unsaved ? ` · <span class="unsaved" title="Das PDF ist gerade in einem anderen Programm geöffnet. Die Antwort wird gespeichert, sobald es wieder geht.">noch nicht im PDF gespeichert</span>` : ""}</div>`;
       }
-    }
+    });
     if (!isPending(n)) {
-      body += `<div class="composer">
-        <textarea rows="1" placeholder="${thread.length ? "Nachfrage …" : "Deine Frage …"}"></textarea>
-        <div class="row"><span class="hint">Strg+Enter sendet</span><button class="btn primary send">Senden</button></div>
+      const mode = S.compose?.id === n.id ? S.compose.mode : thread.some((m) => m.role === "assistant") ? "ask" : "comment";
+      const ph = mode === "ask" ? (thread.length ? "Nachfrage an Claude …" : "Deine Frage an Claude …")
+        : thread.length ? "Kommentar hinzufügen …" : n.subtype === "Text" ? "Text der Notiz …" : "Dein Kommentar …";
+      body += `<div class="composer" data-mode="${mode}">
+        <textarea rows="1" placeholder="${ph}"></textarea>
+        <div class="row"><span class="hint">Strg+Enter: ${mode === "ask" ? "Claude fragen" : "speichern"}</span>
+          <button class="btn ${mode === "comment" ? "primary" : ""} save-c">Kommentieren</button>
+          <button class="btn ${mode === "ask" ? "primary" : ""} send">Claude fragen</button></div>
       </div>`;
     }
   }
@@ -625,7 +854,7 @@ function buildCard(n) {
       <span class="pg">S. ${esc(pageLabel(n.page))}</span>
       <span class="quote" title="${esc(n.text)}">${quote ? `„${esc(quote)}“` : esc(kind)}</span>
       <button class="icon toggle" title="${n.collapsed ? "Aufklappen" : "Einklappen"}">${n.collapsed ? "▸" : "▾"}</button>
-      <button class="icon del" title="Notiz löschen">×</button>
+      <button class="icon del" title="${n.subtype === "Text" ? "Notiz" : "Markierung"} samt Kommentaren löschen">×</button>
     </div>
     <div class="card-body">${body}</div>`;
 
@@ -639,48 +868,119 @@ function buildCard(n) {
   card.addEventListener("mouseenter", () => setHlClass(n.id, "hover", true));
   card.addEventListener("mouseleave", () => setHlClass(n.id, "hover", false));
   card.querySelector(".retry")?.addEventListener("click", () => ask(n, null, true));
+  card.querySelectorAll(".edit").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); editMessage(card, n, b.dataset.msg); }));
 
-  const ta = card.querySelector("textarea");
-  if (ta) {
-    const send = () => { const q = ta.value.trim(); if (q) ask(n, q, false); };
-    card.querySelector(".send").addEventListener("click", send);
-    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+  const comp = card.querySelector(".composer");
+  if (comp) {
+    const ta = comp.querySelector("textarea");
+    const sendAsk = () => { const q = ta.value.trim(); if (q) { if (S.compose?.id === n.id) S.compose = null; ask(n, q, false); } };
+    const sendComment = async () => {
+      const t = ta.value.trim();
+      if (!t) return;
+      comp.querySelectorAll("button, textarea").forEach((el) => (el.disabled = true));
+      try {
+        await api("/api/notes/comment", { id: n.id, text: t });
+        ta.value = "";
+        if (S.compose?.id === n.id) S.compose = null;
+        await afterChange();
+      } catch (e) {
+        comp.querySelectorAll("button, textarea").forEach((el) => (el.disabled = false));
+        showToast("Speichern fehlgeschlagen: " + e.message);
+      }
+    };
+    comp.querySelector(".send").addEventListener("click", sendAsk);
+    comp.querySelector(".save-c").addEventListener("click", sendComment);
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); comp.dataset.mode === "ask" ? sendAsk() : sendComment(); }
+      if (e.key === "Escape" && S.compose?.id === n.id && !ta.value.trim()) { S.compose = null; renderAllCards(); }
+    });
     autoGrow(ta);
   }
   return card;
+}
+
+// Eigene Nachricht bearbeiten (leer speichern löscht sie)
+function editMessage(card, n, msgId) {
+  const m = n.thread.find((x) => x.id === msgId);
+  const el = card.querySelector(`.msg[data-msg="${CSS.escape(msgId)}"]`);
+  if (!m || !el) return;
+  el.classList.add("editing");
+  el.innerHTML = `<textarea rows="2" data-msg="${esc(msgId)}"></textarea>
+    <div class="row"><span class="hint">Leer speichern löscht den Kommentar</span>
+      <button class="btn cancel">Abbrechen</button><button class="btn primary save">Speichern</button></div>`;
+  const ta = el.querySelector("textarea");
+  ta.value = m.text;
+  autoGrow(ta);
+  ta.dispatchEvent(new Event("input"));
+  ta.focus();
+  const save = async () => {
+    el.querySelectorAll("button, textarea").forEach((x) => (x.disabled = true));
+    try {
+      await api("/api/notes/edit", { id: n.id, msg: msgId, text: ta.value });
+      await afterChange();
+    } catch (e) {
+      el.querySelectorAll("button, textarea").forEach((x) => (x.disabled = false));
+      showToast("Speichern fehlgeschlagen: " + e.message);
+    }
+  };
+  el.querySelector(".cancel").addEventListener("click", () => refreshCard(n));
+  el.querySelector(".save").addEventListener("click", save);
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+    if (e.key === "Escape") refreshCard(n);
+  });
+  layoutNotes();
 }
 
 function buildDraftCard() {
   const d = S.draft;
   const card = document.createElement("div");
   card.className = "card draft active";
+  card.style.setProperty("--note-color", css(COLORS[d.color].hl));
   const quote = d.text.length > 90 ? d.text.slice(0, 90) + " …" : d.text;
+  const cfg = {
+    ask: { ph: "Deine Frage zu dieser Stelle …", btn: "Claude fragen" },
+    comment: { ph: "Dein Kommentar zu dieser Stelle …", btn: "Speichern" },
+    sticky: { ph: "Text der Notiz …", btn: "Speichern" },
+  }[d.mode];
   card.innerHTML = `
-    <div class="card-head"><span class="pg">S. ${esc(pageLabel(d.page))}</span><span class="quote" title="${esc(d.text)}">„${esc(quote)}“</span></div>
+    <div class="card-head"><span class="pg">S. ${esc(pageLabel(d.page))}</span><span class="quote" title="${esc(d.text)}">${quote ? `„${esc(quote)}“` : "Neue Notiz"}</span></div>
     <div class="card-body"><div class="composer">
-      <textarea rows="2" placeholder="Deine Frage zu dieser Stelle …"></textarea>
-      <div class="row"><span class="hint">Strg+Enter sendet · Esc bricht ab</span>
-        <button class="btn cancel">Abbrechen</button><button class="btn primary send">Fragen</button></div>
+      <textarea rows="2" placeholder="${cfg.ph}"></textarea>
+      <div class="row"><span class="hint">Strg+Enter · Esc bricht ab</span>
+        <button class="btn cancel">Abbrechen</button><button class="btn primary send">${cfg.btn}</button></div>
     </div></div>`;
   const ta = card.querySelector("textarea");
   const cancel = () => { S.draft = null; renderHighlights(); renderAllCards(); };
   const send = async () => {
-    const q = ta.value.trim();
-    if (!q) return;
+    const t = ta.value.trim();
+    if (!t && d.mode !== "sticky") return;
     card.querySelectorAll("button, textarea").forEach((el) => (el.disabled = true));
     try {
+      if (d.mode === "sticky") {
+        await api("/api/notes/sticky", { page: d.page, point: d.point, color: COLORS[d.color].hl, text: t });
+        S.draft = null;
+        await afterChange();
+        return;
+      }
       const rects = d.rects.filter((r) => r.page === d.page).map(pdfRect);
-      const note = prepNote(await api("/api/notes/create", { page: d.page, pdfRects: rects, text: d.text, question: q }));
-      S.notes.push(note);
+      const body = { page: d.page, kind: "Highlight", color: COLORS[d.color].hl, pdfRects: rects, text: d.text };
+      if (d.mode === "ask") body.question = t; else body.comment = t;
+      const note = prepNote(await api("/api/notes/create", body));
       S.draft = null;
       S.activeId = note.id;
-      renderHighlights();
-      renderAllCards();
-      reloadPdf().catch(() => {});
-      ask(note, q, false, true);
+      if (d.mode === "ask") {
+        S.notes.push(note);
+        renderHighlights();
+        renderAllCards();
+        reloadPdf().catch(() => {});
+        ask(note, t, false, true);
+      } else {
+        await afterChange();
+      }
     } catch (e) {
       card.querySelectorAll("button, textarea").forEach((el) => (el.disabled = false));
-      alert("Konnte die Notiz nicht anlegen: " + e.message);
+      showToast("Konnte die Notiz nicht anlegen: " + e.message);
     }
   };
   card.querySelector(".cancel").addEventListener("click", cancel);
@@ -775,18 +1075,67 @@ function toggleCollapsed(n) {
 }
 
 async function deleteNote(n) {
-  if (!confirm("Diese Notiz mit allen Fragen und Antworten löschen?")) return;
   try {
     await api("/api/notes/delete", { id: n.id });
-    S.notes = S.notes.filter((x) => x.id !== n.id);
     if (S.activeId === n.id) S.activeId = null;
-    renderHighlights();
-    renderAllCards();
-    await reloadPdf();
+    if (S.compose?.id === n.id) S.compose = null;
+    await afterChange();
+    showToast(`${KIND_NAMES[n.subtype] || "Notiz"} gelöscht.`, "Rückgängig", doUndo);
   } catch (e) {
-    alert("Löschen fehlgeschlagen: " + e.message);
+    showToast("Löschen fehlgeschlagen: " + e.message);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Nach Änderungen, Rückgängig, Hinweise
+// ---------------------------------------------------------------------------
+
+async function afterChange() {
+  await refreshNotes(true);
+}
+
+function updateUndo() {
+  const b = $("undoBtn");
+  b.disabled = !S.undo;
+  b.title = S.undo ? `Rückgängig: ${S.undo} (Strg+Z)` : "Nichts rückgängig zu machen";
+}
+
+async function doUndo() {
+  hideBars();
+  try {
+    const r = await api("/api/undo");
+    await afterChange();
+    showToast(`Rückgängig: ${r.undone}`);
+  } catch (e) {
+    showToast(e.message);
+    refreshNotes().catch(() => {});
+  }
+}
+$("undoBtn").onclick = doUndo;
+
+let toastTimer = 0;
+function showToast(text, action, fn) {
+  const t = $("toast");
+  t.querySelector(".txt").textContent = text;
+  const b = t.querySelector(".act");
+  b.hidden = !action;
+  b.textContent = action || "";
+  b.onclick = () => { t.hidden = true; fn && fn(); };
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), action ? 7000 : 4000);
+}
+
+document.addEventListener("keydown", (e) => {
+  const typing = e.target.closest && e.target.closest("textarea, input, select");
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z" && !typing) {
+    e.preventDefault();
+    if (S.undo) doUndo();
+  } else if (e.key === "Escape" && !typing) {
+    hideBars();
+    if (S.tool) setTool(null);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Fragen an Claude
@@ -808,6 +1157,7 @@ async function ask(note, question, retry, saved = false) {
     const updated = await api("/api/ask", { id: note.id, question, model, retry, saved });
     if (updated.deleted) return;
     replaceNote(prepNote(updated));
+    api("/api/notes").then((d) => { S.undo = d.undo || null; S.version = d.version; updateUndo(); }).catch(() => {});
   } catch (e) {
     const last = note.thread[note.thread.length - 1];
     Object.assign(last, { status: "error", text: "Fehler: " + e.message });

@@ -12,6 +12,9 @@ Tauri-2-Programm: Die Oberfläche ist HTML/JavaScript ohne Build-Schritt (`ui/`)
   - Eine Notiz ist eine Wurzel-Anmerkung (Highlight/Underline/StrikeOut/Squiggly/Text/FreeText) mit Antworten (`/IRT`).
   - Eigene Zusatzdaten stehen im Wörterbuch `/PDFTutor`: markierter Text, Claude-Sitzung, Modell, Rolle, Token-Verbrauch.
   - Geschrieben wird **immer inkrementell** (`IncrementalDocument`). `Editor::finish` prüft, dass der bisherige Dateiinhalt unverändert vorne steht.
+  - Arten (`Kind`): Highlight, Underline, StrikeOut, Text (Haftnotiz). Jede bekommt ein eigenes Erscheinungsbild (/AP), damit sie in allen Programmen gleich aussieht. `corners()` legt die Leserichtung anhand der Seitendrehung fest.
+  - Kommentar ohne Antwort steht in /Contents der Wurzel, weitere Kommentare und die Claude-Antworten als Antworten (/IRT). In der Oberfläche gilt eine Nutzer-Nachricht als „Frage“, wenn Claude darauf geantwortet hat, sonst als „Kommentar“.
+- Rückgängig (Strg+Z): Da jede Änderung angehängt wird, kürzt `Doc::undo` die Datei auf die Länge vor dem Schritt (nur wenn sie seither unverändert ist). Schritte über `modify_undoable`; ein gewöhnliches `modify` (z. B. Claude-Antwort) leert den Stapel.
 - `doc.rs`: geöffnetes Dokument. Notizen kommen aus dem PDF. Dazu gehören der Ablauf einer Frage (`ask`), das Speichern (`modify`, atomar mit Wiederholung bei gesperrter Datei) und die Übernahme der `*.notes.json` aus Version 3.
 - `cache.rs`: Seiten-Cache für Claude (Text und JPEG je Seite, `uebersicht.md`, `volltext.md`) im Datenordner. Der Schlüssel ist der Pfad. Gültig, solange die ersten 1 MB der Datei gleich bleiben, denn angehängte Kommentare ändern daran nichts.
 - `claude.rs`: Aufruf von `claude -p` (Prompt über stdin, gleichbleibender Teil als `--append-system-prompt-file`, nur lesende Werkzeuge `Read,Grep,Glob`) und Prompt-Texte
@@ -30,3 +33,4 @@ Datenordner: `%LOCALAPPDATA%\PDF-Tutor-Daten` (Windows) bzw. `~/.local/share/pdf
 
 - `cargo test` in `src-tauri` (Schreiben in normale und verschlüsselte PDFs, fremde Anmerkungen, Löschen). Die Testdateien liegen in `PT_TESTDIR`.
 - Ende-zu-Ende-Tests laufen mit `tauri-driver` und WebKitWebDriver unter Linux/Xvfb.
+- Gegenprobe der Erscheinungsbilder mit einem zweiten Renderer (z. B. PyMuPDF), auch für gedrehte Seiten.

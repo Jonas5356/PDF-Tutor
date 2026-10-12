@@ -1,6 +1,6 @@
 //! Ein geöffnetes Dokument: Notizen (aus dem PDF), Fragen an Claude, Schreiben ins PDF.
 
-use crate::annots::{self, Editor, Note, CLAUDE_AUTHOR};
+use crate::annots::{self, Editor, Kind, Note, CLAUDE_AUTHOR};
 use crate::cache::PageCache;
 use crate::claude::{self, HistoryItem};
 use crate::pdfium_host;
@@ -15,6 +15,22 @@ use std::time::{Instant, SystemTime};
 
 pub const LOCKED_MSG: &str =
     "Das PDF ist gerade in einem anderen Programm geöffnet und kann nicht gespeichert werden. Bitte dort schließen.";
+
+/// Ein Schritt, der sich rückgängig machen lässt: Da jede Änderung ans Dateiende angehängt
+/// wird, genügt es, die Datei wieder auf die alte Länge zu kürzen.
+struct UndoStep {
+    prev_len: usize,
+    new_len: usize,
+    tail: String,
+    label: String,
+}
+
+fn tail_sig(bytes: &[u8]) -> String {
+    let start = bytes.len().saturating_sub(65536);
+    crate::util::sha1_hex(&bytes[start..])
+}
+
+const UNDO_MAX: usize = 50;
 
 struct Unsaved {
     note_id: String,
@@ -33,6 +49,7 @@ pub struct Doc {
     extra: Mutex<HashMap<String, Vec<Value>>>,
     unsaved: Mutex<Vec<Unsaved>>,
     retry_running: Mutex<bool>,
+    undo: Mutex<Vec<UndoStep>>,
 }
 
 fn file_sig(path: &Path) -> String {
@@ -47,6 +64,15 @@ fn file_sig(path: &Path) -> String {
             format!("{}-{}", m.len(), t)
         }
         Err(_) => String::new(),
+    }
+}
+
+fn kind_label(k: Kind) -> &'static str {
+    match k {
+        Kind::Highlight => "Hervorhebung",
+        Kind::Underline => "Unterstreichung",
+        Kind::StrikeOut => "Durchstreichung",
+        Kind::Note => "Haftnotiz",
     }
 }
 
@@ -66,6 +92,7 @@ impl Doc {
             extra: Mutex::new(HashMap::new()),
             unsaved: Mutex::new(vec![]),
             retry_running: Mutex::new(false),
+            undo: Mutex::new(vec![]),
         });
         let (title, n) = (doc.cache.title.clone(), doc.cache.n);
         ctx.lib.update(id, |e| {
@@ -157,6 +184,7 @@ impl Doc {
             "state": state,
             "version": file_sig(&self.path),
             "unsavedCount": self.unsaved.lock().unwrap().len(),
+            "undo": self.undo.lock().unwrap().last().map(|u| u.label.clone()),
         }))
     }
 
@@ -191,21 +219,70 @@ impl Doc {
     // -----------------------------------------------------------------------
     // Schreiben
 
-    /// Änderung ins PDF schreiben (inkrementell, atomar ersetzt).
+    /// Änderung ins PDF schreiben (inkrementell, atomar ersetzt). Nicht rückgängig zu machen;
+    /// frühere Rückgängig-Schritte verfallen dabei.
     pub fn modify<R>(&self, ctx: &Ctx, f: impl FnOnce(&mut Editor) -> Result<R, String>) -> Result<R, String> {
+        self.modify_ex(ctx, None, f)
+    }
+
+    /// Wie `modify`, aber als Schritt, den Strg+Z wieder zurücknimmt.
+    pub fn modify_undoable<R>(&self, ctx: &Ctx, label: &str, f: impl FnOnce(&mut Editor) -> Result<R, String>) -> Result<R, String> {
+        self.modify_ex(ctx, Some(label), f)
+    }
+
+    fn modify_ex<R>(&self, ctx: &Ctx, label: Option<&str>, f: impl FnOnce(&mut Editor) -> Result<R, String>) -> Result<R, String> {
         let _g = self.write.lock().unwrap();
         let bytes = std::fs::read(&self.path).map_err(|e| format!("PDF kann nicht gelesen werden: {e}"))?;
         self.backup_once(ctx, &bytes);
+        let prev_len = bytes.len();
         let mut ed = Editor::open(bytes)?;
         let r = f(&mut ed)?;
         let out = ed.finish()?;
         if let Err(e) = write_atomic(&self.path, &out) {
             return Err(if is_locked_error(&e) { LOCKED_MSG.into() } else { format!("Speichern fehlgeschlagen: {e}") });
         }
+        {
+            let mut undo = self.undo.lock().unwrap();
+            match label {
+                Some(l) => {
+                    undo.push(UndoStep { prev_len, new_len: out.len(), tail: tail_sig(&out), label: l.to_string() });
+                    if undo.len() > UNDO_MAX {
+                        undo.remove(0);
+                    }
+                }
+                None => undo.clear(),
+            }
+        }
+        self.after_write(ctx);
+        Ok(r)
+    }
+
+    fn after_write(&self, ctx: &Ctx) {
         *self.notes_cache.lock().unwrap() = None;
         let count = self.notes().map(|n| n.len() as u32).unwrap_or(0);
         ctx.lib.update(&self.id, |e| e.notes = count);
-        Ok(r)
+    }
+
+    /// Letzten Schritt zurücknehmen: Datei auf den Stand davor kürzen.
+    pub fn undo(&self, ctx: &Ctx) -> Result<Value, String> {
+        let _g = self.write.lock().unwrap();
+        let Some(step) = self.undo.lock().unwrap().pop() else {
+            return Err("Es gibt nichts rückgängig zu machen.".into());
+        };
+        let bytes = std::fs::read(&self.path).map_err(|e| format!("PDF kann nicht gelesen werden: {e}"))?;
+        if bytes.len() != step.new_len || tail_sig(&bytes) != step.tail || step.prev_len > bytes.len() {
+            self.undo.lock().unwrap().clear();
+            return Err("Rückgängig ist nicht mehr möglich, weil das PDF inzwischen anderweitig verändert wurde.".into());
+        }
+        // Der alte Stand muss sich wieder lesen lassen
+        annots::load(&bytes[..step.prev_len])?;
+        if let Err(e) = write_atomic(&self.path, &bytes[..step.prev_len]) {
+            let msg = if is_locked_error(&e) { LOCKED_MSG.to_string() } else { format!("Speichern fehlgeschlagen: {e}") };
+            self.undo.lock().unwrap().push(step);
+            return Err(msg);
+        }
+        self.after_write(ctx);
+        Ok(json!({"ok": true, "undone": step.label}))
     }
 
     fn backup_once(&self, ctx: &Ctx, bytes: &[u8]) {
@@ -227,21 +304,100 @@ impl Doc {
         ctx.lib.update(&self.id, |e| e.backup_done = true);
     }
 
-    pub fn create_note(&self, ctx: &Ctx, page: u32, rects: Vec<[f32; 4]>, text: &str, question: &str) -> Result<Value, String> {
+    /// Neue Markierung. Mit `question` folgt gleich eine Frage an Claude (dann nicht rückgängig zu machen).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_note(
+        &self,
+        ctx: &Ctx,
+        page: u32,
+        kind: Kind,
+        rects: Vec<[f32; 4]>,
+        color: [f32; 3],
+        text: &str,
+        comment: &str,
+        question: &str,
+    ) -> Result<Value, String> {
         let nm = format!("pdftutor-{}", new_id());
         let author = ctx.settings.read().unwrap().author();
         let meta = json!({"App": "PDF-Tutor", "Text": text.chars().take(5000).collect::<String>()});
-        self.modify(ctx, |ed| ed.add_highlight(page, &rects, [1.0, 0.85, 0.0], question, &author, &nm, &meta))?;
+        let contents = if question.trim().is_empty() { comment.trim() } else { question.trim() };
+        let write = |ed: &mut Editor| ed.add_markup(page, kind, &rects, color, contents, &author, &nm, &meta);
+        if question.trim().is_empty() {
+            self.modify_undoable(ctx, &format!("{} anlegen", kind_label(kind)), write)?;
+        } else {
+            self.modify(ctx, write)?;
+        }
         let n = self.find(&nm)?;
+        Ok(self.note_json(ctx, &n))
+    }
+
+    /// Neue Haftnotiz an einem Punkt (PDF-Koordinaten).
+    pub fn create_sticky(&self, ctx: &Ctx, page: u32, at: (f32, f32), color: [f32; 3], text: &str) -> Result<Value, String> {
+        let nm = format!("pdftutor-{}", new_id());
+        let author = ctx.settings.read().unwrap().author();
+        let meta = json!({"App": "PDF-Tutor"});
+        self.modify_undoable(ctx, "Haftnotiz anlegen", |ed| ed.add_sticky(page, at, color, text.trim(), &author, &nm, &meta))?;
+        let n = self.find(&nm)?;
+        Ok(self.note_json(ctx, &n))
+    }
+
+    /// Art und/oder Farbe ändern.
+    pub fn restyle(&self, ctx: &Ctx, id: &str, kind: Option<Kind>, color: Option<[f32; 3]>) -> Result<Value, String> {
+        let n = self.find(id)?;
+        let label = if kind.is_some() && kind != Kind::from_name(&n.subtype) { "Art ändern" } else { "Farbe ändern" };
+        self.modify_undoable(ctx, label, |ed| ed.restyle(&n, kind, color))?;
+        let n = self.find(id)?;
+        Ok(self.note_json(ctx, &n))
+    }
+
+    /// Eigenen Kommentar ohne Claude an eine Notiz anhängen.
+    pub fn comment(&self, ctx: &Ctx, id: &str, text: &str) -> Result<Value, String> {
+        if text.trim().is_empty() {
+            return Err("Leerer Kommentar.".into());
+        }
+        let n = self.find(id)?;
+        let author = ctx.settings.read().unwrap().author();
+        let nm = format!("pdftutor-{}", new_id());
+        self.modify_undoable(ctx, "Kommentar hinzufügen", |ed| {
+            if n.thread.is_empty() {
+                // erster Text einer Notiz: direkt in die Markierung bzw. Haftnotiz
+                ed.set_contents(n.obj, text.trim())
+            } else {
+                ed.add_reply(&n, text.trim(), &author, &nm, &json!({"Role": "user"})).map(|_| ())
+            }
+        })?;
+        let n = self.find(id)?;
+        Ok(self.note_json(ctx, &n))
+    }
+
+    /// Text einer Nachricht (Kommentar oder Frage) ändern; leerer Text löscht die Nachricht.
+    pub fn edit_message(&self, ctx: &Ctx, note_id: &str, msg_id: &str, text: &str) -> Result<Value, String> {
+        let n = self.find(note_id)?;
+        let msg = n.thread.iter().find(|m| m.id == msg_id).ok_or_else(|| "Nachricht nicht gefunden".to_string())?;
+        if msg.role != "user" {
+            return Err("Antworten von Claude lassen sich nicht bearbeiten.".into());
+        }
+        let text = text.trim().to_string();
+        let label = if text.is_empty() { "Kommentar löschen" } else { "Kommentar bearbeiten" };
+        let is_root = msg_id == n.id;
+        self.modify_undoable(ctx, label, |ed| {
+            let (obj, page) = annots::find_annot(ed.doc(), msg_id).ok_or_else(|| "Nachricht nicht gefunden".to_string())?;
+            if text.is_empty() && !is_root {
+                ed.remove_annot(page, obj)
+            } else {
+                ed.set_contents(obj, &text)
+            }
+        })?;
+        let n = self.find(note_id)?;
         Ok(self.note_json(ctx, &n))
     }
 
     pub fn delete_note(&self, ctx: &Ctx, id: &str) -> Result<(), String> {
         let n = self.find(id)?;
-        self.modify(ctx, |ed| ed.delete_note(&n))?;
+        let label = if n.subtype == "Text" { "Haftnotiz löschen" } else { "Markierung löschen" };
+        self.modify_undoable(ctx, label, |ed| ed.delete_note(&n))?;
         self.extra.lock().unwrap().remove(id);
         self.unsaved.lock().unwrap().retain(|u| u.note_id != id);
-        ctx.lib.update(&self.id, |e| e.ui.collapsed.retain(|c| c != id));
         for img in std::fs::read_dir(&ctx.paths.marks).into_iter().flatten().flatten() {
             if img.file_name().to_string_lossy().starts_with(&format!("markierung_{}", safe(id))) {
                 let _ = std::fs::remove_file(img.path());

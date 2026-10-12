@@ -1,6 +1,6 @@
 [package]
 name = "pdf-tutor"
-version = "4.0.0"
+version = "4.1.0"
 description = "PDF-Reader zum Durcharbeiten von Fachliteratur mit Fragen an Claude"
 edition = "2021"
 license = "MIT OR Apache-2.0"
