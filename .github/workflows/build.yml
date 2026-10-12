@@ -78,7 +78,7 @@ jobs:
         with:
           tagName: ${{ (startsWith(github.ref, 'refs/tags/') && github.ref_name) || (inputs.release == true && 'v__VERSION__') || '' }}
           releaseName: "PDF-Tutor __VERSION__"
-          releaseBody: "Download and run PDF-Tutor_*_x64-setup.exe below (Assets). / Installer PDF-Tutor_*_x64-setup.exe unten unter Assets herunterladen und ausführen."
+          releaseBody: "Download and run PDF-Tutor_*_x64-setup.exe below (Assets). / Installer PDF-Tutor_*_x64-setup.exe unten unter Assets herunterladen und ausführen.\n\n[Code signing policy](https://github.com/Jonas5356/PDF-Tutor#code-signing-policy) · [Privacy](https://github.com/Jonas5356/PDF-Tutor#privacy)"
           releaseDraft: true
 
       - uses: actions/upload-artifact@v5

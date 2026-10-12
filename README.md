@@ -32,10 +32,14 @@ Download `PDF-Tutor_…_x64-setup.exe` from [Releases](../../releases) and run i
 
 Windows may show "Windows protected your PC" because the program is not signed yet. Click "More info" and then "Run anyway".
 
+To uninstall, use Windows Settings → Apps → PDF-Tutor. Your PDFs and the comments in them stay untouched; the data folder (see below) is kept and can be deleted manually.
+
 ## Privacy
 
-- No telemetry, no servers of our own.
-- When you ask a question, Claude Code sends the question, the highlighted passage, page images and page texts of the document to Anthropic. The terms of your Claude account apply.
+- No telemetry, no servers of our own, no user accounts.
+- **Questions to Claude** are only sent when you ask one. Claude Code then transfers the question, the highlighted passage, page images and page texts of the document to Anthropic under the terms of your Claude account ([Anthropic Privacy Policy](https://www.anthropic.com/legal/privacy)).
+- **Update check:** about every 6 hours (and when you click "Check for updates"), PDF-Tutor downloads a small version file (`latest.json`) from this project's GitHub releases. No information about you, your documents or your notes is sent; GitHub only sees an ordinary download request ([GitHub Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)). Updates are only installed when you click "Update now".
+- **Links** in Claude's answers open in your web browser only when you click them.
 - Page images and texts prepared for Claude, the library and the settings are stored locally in `%LOCALAPPDATA%\PDF-Tutor-Daten`.
 
 ## Notes
@@ -59,6 +63,21 @@ Code structure: see [CLAUDE.md](CLAUDE.md). Translations of the interface are in
 ## License
 
 Licensed under either the [MIT license](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at your option. Licenses of the bundled third-party components (PDF.js, PDFium, KaTeX and others) are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+*Status: the application with SignPath Foundation is in progress. Until it is approved, releases are not signed.*
+
+- Committers and reviewers: [Jonas Reitbauer (@Jonas5356)](https://github.com/Jonas5356)
+- Approvers: [Jonas Reitbauer (@Jonas5356)](https://github.com/Jonas5356)
+
+Only binaries built by GitHub Actions from the source code in this repository are signed ([build workflow](.github/workflows/build.yml)). Every signing request is approved manually.
+
+**Privacy policy:** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with the exception of the update check described under [Privacy](#privacy), which only downloads a version file and sends no information about the user. Questions to Claude are sent through Claude Code to Anthropic only when the user asks them ([Anthropic Privacy Policy](https://www.anthropic.com/legal/privacy)).
+
+**System changes:** The installer installs PDF-Tutor for the current user (no administrator rights) and adds PDF-Tutor to the "Open with" list for PDF files. It does not change the default PDF program. The uninstaller removes the program and these entries.
 
 ---
 
