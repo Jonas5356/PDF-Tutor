@@ -377,6 +377,8 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 .collect::<Result<_, _>>()?;
             let out = crate::pdfium_host::assemble(&sources, &spec).map_err(bad)?;
             write_atomic(&path, &out).map_err(|e| bad(tx(&format!("Saving failed: {e}"), &format!("Speichern fehlgeschlagen: {e}"))))?;
+            // Eine andere, gerade geöffnete Datei wurde ersetzt: beim nächsten Zugriff neu einlesen
+            ctx.docs.lock().unwrap().retain(|_, d| crate::util::norm_path(&d.path) != target);
             let id = ctx.lib.ensure(&path);
             Ok(json!({"path": path.to_string_lossy(), "id": id, "pages": spec.len()}))
         }

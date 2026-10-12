@@ -63,8 +63,10 @@ function modelLabel(id) {
 }
 
 const EFFORT_NAMES = { low: "low", medium: "medium", high: "high", xhigh: "very high", max: "maximum" };
-const effortLabel = (e) => (e && EFFORT_NAMES[e] ? tr("depth {level}", { level: tr(EFFORT_NAMES[e]) }) : "");
-const effortShort = (e) => (e && EFFORT_NAMES[e] ? tr(EFFORT_NAMES[e]) : tr("default"));
+// Werte aus dem PDF (z. B. „Effort“) nur über eigene Schlüssel nachschlagen
+const own = (obj, k) => (typeof k === "string" && Object.prototype.hasOwnProperty.call(obj, k) ? obj[k] : undefined);
+const effortLabel = (e) => (own(EFFORT_NAMES, e) ? tr("depth {level}", { level: tr(EFFORT_NAMES[e]) }) : "");
+const effortShort = (e) => (own(EFFORT_NAMES, e) ? tr(EFFORT_NAMES[e]) : tr("default"));
 const isExtraModel = (id) => !!(S.info?.models || []).find((m) => m.id === id)?.extra;
 
 // Modelle, die Zusatzguthaben kosten können, farbig kennzeichnen
@@ -451,7 +453,7 @@ $("modeSelect").onchange = async (e) => {
 
 // Status des Dokuments (Vorbereitung, Umfang, Modus)
 const fmtNum = (n) => window.I18N.fmtNum(n);
-const modeName = (m) => ({ volltext: tr("full text"), suche: tr("search") }[m] || m || "");
+const modeName = (m) => (m === "volltext" ? tr("full text") : m === "suche" ? tr("search") : String(m || ""));
 
 function updateDocStatus() {
   const d = S.doc;
@@ -507,7 +509,7 @@ const COLORS = [
   { name: "Orange", hl: [1, 0.65, 0.25],    line: [0.95, 0.45, 0.05] },
 ];
 const KIND_NAMES = { Highlight: "Highlight", Underline: "Underline", StrikeOut: "Strikeout", Squiggly: "Markup", Text: "Note", FreeText: "Text box" };
-const kindName = (k) => tr(KIND_NAMES[k] || "Annotation");
+const kindName = (k) => tr(own(KIND_NAMES, k) || "Annotation");
 const colorFor = (i, kind) => (kind === "Highlight" || kind === "Text" ? COLORS[i].hl : COLORS[i].line);
 const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
 
@@ -713,7 +715,7 @@ function hitTestNote(x, y) {
 }
 
 function openMenu(n, x, y) {
-  const editable = KIND_NAMES[n.subtype] && n.subtype !== "Squiggly" && n.subtype !== "FreeText";
+  const editable = own(KIND_NAMES, n.subtype) && n.subtype !== "Squiggly" && n.subtype !== "FreeText";
   markBar.querySelectorAll("[data-kind]").forEach((b) => {
     b.hidden = n.subtype === "Text" || !editable;
     b.classList.toggle("on", b.dataset.kind === n.subtype);
@@ -890,7 +892,7 @@ function buildCard(n) {
       if (m.role === "user") {
         const who = m.author && n.own === false ? `<span class="who">${esc(m.author)}</span>` : "";
         const edit = m.id && !isPending(n) ? `<button class="icon edit" data-msg="${esc(m.id)}" title="${esc(tr("Edit"))}">✎</button>` : "";
-        body += `<div class="msg ${isQuestion(i) ? "q" : "c"}" data-label="${esc(isQuestion(i) ? tr("Question") : tr("Comment"))}" data-msg="${esc(m.id || "")}">${edit}${who}${renderMD(m.text)}</div>`;
+        body += `<div class="msg ${isQuestion(i) ? "q" : "c"}" data-label="${esc(isQuestion(i) ? tr("Question") : tr("Comment"))}" data-msg="${esc(m.id || "")}">${edit}${who}${renderMD(m.text, { breaks: true })}</div>`;
       } else if (m.status === "pending") {
         const start = Date.parse(m.time) || Date.now();
         body += `<div class="msg pending"><span class="spinner"></span>${esc(tr("Claude ({model}) is thinking …", { model: modelLabel(m.model) }))} <span class="elapsed" data-start="${start}"></span></div>`;
@@ -900,7 +902,7 @@ function buildCard(n) {
         body += `<div class="msg a">${renderMD(m.text)}</div>`;
         const u = m.usage;
         const tip = u ? tr("Input {a} · from cache {b} · written to cache {c} · output {d} tokens", { a: fmtNum(u.input_tokens), b: fmtNum(u.cache_read_input_tokens), c: fmtNum(u.cache_creation_input_tokens), d: fmtNum(u.output_tokens) }) : "";
-        body += `<div class="meta" title="${esc(tip)}">${esc(modelLabel(m.model))}${m.effort ? ` · ${esc(effortLabel(m.effort))}` : ""}${m.mode ? ` · ${modeName(m.mode)}` : ""}${m.seconds ? ` · ${m.seconds} s` : ""}${m.unsaved ? ` · <span class="unsaved" title="${esc(tr("The PDF is currently open in another program. The answer will be saved as soon as possible."))}">${esc(tr("not yet saved in the PDF"))}</span>` : ""}</div>`;
+        body += `<div class="meta" title="${esc(tip)}">${esc(modelLabel(m.model))}${m.effort ? ` · ${esc(effortLabel(m.effort))}` : ""}${m.mode ? ` · ${esc(modeName(m.mode))}` : ""}${m.seconds ? ` · ${esc(m.seconds)} s` : ""}${m.unsaved ? ` · <span class="unsaved" title="${esc(tr("The PDF is currently open in another program. The answer will be saved as soon as possible."))}">${esc(tr("not yet saved in the PDF"))}</span>` : ""}</div>`;
       }
     });
     if (!isPending(n)) {

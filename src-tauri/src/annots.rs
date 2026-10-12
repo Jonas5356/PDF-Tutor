@@ -6,7 +6,7 @@
 
 use crate::i18n::tx;
 use crate::util::{pdf_date, pdf_date_to_iso};
-use lopdf::{decode_text_string, dictionary, text_string, Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream};
+use lopdf::{decode_text_string, dictionary, text_string, Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -76,8 +76,48 @@ fn resolve<'a>(doc: &'a Document, o: &'a Object) -> &'a Object {
     }
 }
 
+/// Text aus einem PDF-String (PDFDocEncoding, UTF-16BE oder UTF-8). Anders als
+/// `lopdf::decode_text_string` bleiben bei PDFDocEncoding Tabulator und Zeilenumbrüche
+/// erhalten; lopdf lässt diese Zeichen weg, sodass mehrzeilige Texte zusammenliefen.
+/// Zeilenumbrüche werden vereinheitlicht (Acrobat trennt Zeilen oft nur mit CR).
+pub fn decode_text(o: &Object) -> String {
+    let Ok(s) = o.as_str() else { return String::new() };
+    let text = if s.starts_with(b"\xFE\xFF") || s.starts_with(b"\xEF\xBB\xBF") {
+        decode_text_string(o).map(|t| t.trim_start_matches('\u{feff}').to_string()).unwrap_or_default()
+    } else {
+        let doc_enc = |bytes: &[u8], out: &mut String| {
+            if bytes.is_empty() {
+                return;
+            }
+            // ein Abschnitt darf nicht wie eine Byte-Order-Mark beginnen
+            let (first, rest) = bytes.split_at(1);
+            for part in [first, rest] {
+                if let Ok(t) = decode_text_string(&Object::String(part.to_vec(), StringFormat::Literal)) {
+                    out.push_str(&t);
+                }
+            }
+        };
+        let mut out = String::new();
+        let mut start = 0;
+        for (i, b) in s.iter().enumerate() {
+            if matches!(b, b'\t' | b'\n' | b'\r') {
+                doc_enc(&s[start..i], &mut out);
+                out.push(*b as char);
+                start = i + 1;
+            }
+        }
+        doc_enc(&s[start..], &mut out);
+        out
+    };
+    if text.contains('\r') {
+        text.replace("\r\n", "\n").replace('\r', "\n")
+    } else {
+        text
+    }
+}
+
 fn get_text(doc: &Document, d: &Dictionary, key: &[u8]) -> String {
-    d.get(key).ok().map(|o| resolve(doc, o)).and_then(|o| decode_text_string(o).ok()).unwrap_or_default()
+    d.get(key).ok().map(|o| decode_text(resolve(doc, o))).unwrap_or_default()
 }
 
 fn get_name(d: &Dictionary, key: &[u8]) -> Option<Vec<u8>> {
@@ -100,7 +140,7 @@ fn meta_to_json(doc: &Document, d: &Dictionary) -> Value {
             Object::Real(f) => json!(f),
             Object::Name(n) => json!(String::from_utf8_lossy(n)),
             Object::Boolean(b) => json!(b),
-            o @ Object::String(..) => json!(decode_text_string(o).unwrap_or_default()),
+            o @ Object::String(..) => json!(decode_text(o)),
             Object::Dictionary(dd) => meta_to_json(doc, dd),
             _ => Value::Null,
         };
@@ -797,6 +837,34 @@ mod tests {
         let outpath = format!("{}/out_{}", dir(), name);
         std::fs::write(&outpath, &out).unwrap();
         read_notes(&load(&out).unwrap())
+    }
+
+    #[test]
+    fn keeps_line_breaks_in_texts() {
+        // ASCII-Texte schreibt lopdf in PDFDocEncoding, andere als UTF-16
+        for (written, expected) in [
+            ("Zeile 1\nZeile 2\r\nZeile 3\rEnde\tTab", "Zeile 1\nZeile 2\nZeile 3\nEnde\tTab"),
+            ("Größe\n\n- Punkt", "Größe\n\n- Punkt"),
+        ] {
+            assert_eq!(decode_text(&text_string(written)), expected);
+        }
+        // PDFDocEncoding mit Sonderzeichen (0x8C = „ , 0xE4 = ä) und Zeilenumbruch
+        let o = Object::String(b"\x8Ca\xE4\nb".to_vec(), StringFormat::Literal);
+        assert_eq!(decode_text(&o), "\u{201E}aä\nb");
+        // UTF-8 mit Byte-Order-Mark
+        let o = Object::String(b"\xEF\xBB\xBFx\ny".to_vec(), StringFormat::Literal);
+        assert_eq!(decode_text(&o), "x\ny");
+        let path = format!("{}/plain.pdf", dir());
+        let bytes = std::fs::read(&path).unwrap();
+        let mut ed = Editor::open(bytes).unwrap();
+        let id = ed.add_highlight(1, &[[100.0, 700.0, 300.0, 712.0]], [1.0, 0.85, 0.0], "Frage\nzweite Zeile", "T", "lb1", &json!({"App": "PDF-Tutor"})).unwrap();
+        let root = Note { id: "lb1".into(), obj: id, page: 1, subtype: "Highlight".into(), rects: vec![[100.0, 700.0, 300.0, 712.0]],
+            color: [1.0, 0.85, 0.0], author: "T".into(), created: String::new(), text: String::new(), thread: vec![], session: None, own: true };
+        ed.add_reply(&root, "First paragraph.\n\n- item\n- item", CLAUDE_AUTHOR, "lb2", &json!({"Role": "assistant"})).unwrap();
+        let notes = read_notes(&load(&ed.finish().unwrap()).unwrap());
+        let n = notes.iter().find(|n| n.id == "lb1").unwrap();
+        assert_eq!(n.thread[0].text, "Frage\nzweite Zeile");
+        assert_eq!(n.thread[1].text, "First paragraph.\n\n- item\n- item");
     }
 
     #[test]

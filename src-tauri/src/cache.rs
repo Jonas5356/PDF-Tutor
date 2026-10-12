@@ -1,6 +1,7 @@
 //! Seiten-Cache: Text und Bild jeder Seite, Übersicht und Volltext für Claude.
 //! Claude liest diese Dateien statt des Original-PDFs. Der Cache bleibt gültig, wenn
-//! Anmerkungen ins PDF geschrieben werden (die werden nur angehängt).
+//! Anmerkungen ins PDF geschrieben werden (die werden nur angehängt): Geprüft wird, ob der
+//! Dateianfang bis zur Länge beim Erstellen des Caches unverändert ist.
 
 use crate::pdfium_host;
 use crate::util::{norm_path, sha1_hex, write_atomic};
@@ -10,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-const CACHE_VERSION: u64 = 3;
+const CACHE_VERSION: u64 = 4;
 const MAX_EDGE: i32 = 1600;
 const CHARS_PER_TOKEN: f64 = 3.3;
 const CHUNK: usize = 6;
@@ -32,9 +33,23 @@ pub struct PageCache {
     images_done: AtomicU32,
 }
 
-fn fingerprint(bytes: &[u8]) -> String {
+/// Prüfsumme der Caches bis Version 4.4.1 (erstes MB); nur noch zum Übernehmen der Seitenbilder.
+fn legacy_fingerprint(bytes: &[u8]) -> String {
     let n = bytes.len().min(1 << 20);
     sha1_hex(&bytes[..n])
+}
+
+/// Ist die Datei noch dasselbe Dokument wie beim Erstellen des Caches (höchstens mit
+/// angehängten Änderungen wie Kommentaren)?
+fn same_document(meta: &serde_json::Value, bytes: &[u8], pages: u32) -> bool {
+    if meta["pages"].as_u64() != Some(pages as u64) {
+        return false;
+    }
+    let fp = meta["fingerprint"].as_str();
+    match meta["len"].as_u64() {
+        Some(len) => (len as usize) <= bytes.len() && fp == Some(sha1_hex(&bytes[..len as usize]).as_str()),
+        None => fp == Some(legacy_fingerprint(bytes).as_str()),
+    }
 }
 
 pub fn nice_title(meta: &str, path: &Path) -> String {
@@ -93,9 +108,8 @@ impl PageCache {
             text_dir,
             img_dir,
         });
-        let fp = fingerprint(&bytes);
         let c2 = c.clone();
-        std::thread::spawn(move || c2.run(bytes, fp));
+        std::thread::spawn(move || c2.run(bytes));
         Ok(c)
     }
 
@@ -130,8 +144,8 @@ impl PageCache {
         }
     }
 
-    fn run(self: Arc<Self>, bytes: Vec<u8>, fp: String) {
-        if let Err(e) = self.build_text(&bytes, &fp) {
+    fn run(self: Arc<Self>, bytes: Vec<u8>) {
+        if let Err(e) = self.build_text(&bytes) {
             crate::logf!("Seitentexte: {e}");
             *self.error.lock().unwrap() = Some(crate::i18n::tx(&format!("Text could not be extracted: {e}"), &format!("Text konnte nicht extrahiert werden: {e}")));
         }
@@ -143,30 +157,21 @@ impl PageCache {
         if let Err(e) = self.build_images(&bytes) {
             crate::logf!("Seitenbilder: {e}");
         }
+        // fertig (auch wenn einzelne Bilder fehlen; die entstehen bei Bedarf vor einer Frage)
+        self.images_done.store(self.n, Ordering::Relaxed);
     }
 
-    fn build_text(&self, bytes: &[u8], fp: &str) -> Result<(), String> {
+    fn build_text(&self, bytes: &[u8]) -> Result<(), String> {
         let meta_path = self.dir.join("meta.json");
-        if let Ok(t) = std::fs::read_to_string(&meta_path) {
-            if let Ok(m) = serde_json::from_str::<serde_json::Value>(&t) {
-                if m["version"].as_u64() == Some(CACHE_VERSION)
-                    && m["pages"].as_u64() == Some(self.n as u64)
-                    && m["fingerprint"].as_str() == Some(fp)
-                    && self.fulltext_path().exists()
-                    && self.overview_path().exists()
-                    && (1..=self.n).all(|p| self.text_path(p).exists())
-                {
-                    *self.tokens.lock().unwrap() = m["tokens"].as_u64();
-                    return Ok(());
-                }
+        let old = std::fs::read_to_string(&meta_path).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+        let same_doc = old.as_ref().map(|m| same_document(m, bytes, self.n)).unwrap_or(false);
+        if let Some(m) = old.as_ref().filter(|m| same_doc && m["version"].as_u64() == Some(CACHE_VERSION)) {
+            if self.fulltext_path().exists() && self.overview_path().exists() && (1..=self.n).all(|p| self.text_path(p).exists()) {
+                *self.tokens.lock().unwrap() = m["tokens"].as_u64();
+                return Ok(());
             }
         }
         // Bilder nur verwerfen, wenn sich das Dokument geändert hat (nicht bei neuer Cache-Version)
-        let same_doc = std::fs::read_to_string(&meta_path)
-            .ok()
-            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-            .map(|m| m["pages"].as_u64() == Some(self.n as u64) && m["fingerprint"].as_str() == Some(fp))
-            .unwrap_or(false);
         if !same_doc {
             if let Ok(rd) = std::fs::read_dir(&self.img_dir) {
                 for e in rd.flatten() {
@@ -193,7 +198,7 @@ impl PageCache {
         *self.tokens.lock().unwrap() = Some(tokens);
         write_atomic(&self.fulltext_path(), full.as_bytes()).map_err(|e| e.to_string())?;
         write_atomic(&self.overview_path(), self.overview(tokens).as_bytes()).map_err(|e| e.to_string())?;
-        let meta = json!({"version": CACHE_VERSION, "pages": self.n, "tokens": tokens, "fingerprint": fp});
+        let meta = json!({"version": CACHE_VERSION, "pages": self.n, "tokens": tokens, "len": bytes.len(), "fingerprint": sha1_hex(bytes)});
         write_atomic(&meta_path, meta.to_string().as_bytes()).map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -274,20 +279,57 @@ impl PageCache {
     fn build_images(&self, bytes: &[u8]) -> Result<(), String> {
         let mut missing: BTreeSet<u32> = (1..=self.n).filter(|p| !self.img_path(*p).exists()).collect();
         self.images_done.store(self.n - missing.len() as u32, Ordering::Relaxed);
+        let mut failed = 0;
         while !missing.is_empty() {
             let f = self.focus.load(Ordering::Relaxed) as i64;
             let mut order: Vec<u32> = missing.iter().copied().collect();
             order.sort_by_key(|q| ((*q as i64 - f).abs(), *q));
-            let chunk: Vec<u32> = order.into_iter().take(CHUNK).collect();
+            // Seiten, die inzwischen vor einer Frage entstanden sind, überspringen
+            let mut chunk = vec![];
+            for q in order {
+                if self.img_path(q).exists() {
+                    missing.remove(&q);
+                } else {
+                    chunk.push(q);
+                    if chunk.len() >= CHUNK {
+                        break;
+                    }
+                }
+            }
+            if chunk.is_empty() {
+                break;
+            }
             let idx: Vec<u32> = chunk.iter().map(|p| p - 1).collect();
-            for (i, data) in pdfium_host::render_pages_jpeg(bytes, &idx, MAX_EDGE)? {
+            let rendered = match pdfium_host::render_pages_jpeg(bytes, &idx, MAX_EDGE) {
+                Ok(r) => r,
+                // einzeln versuchen, damit eine fehlerhafte Seite die übrigen nicht aufhält
+                Err(_) => idx
+                    .iter()
+                    .filter_map(|&i| match pdfium_host::render_pages_jpeg(bytes, &[i], MAX_EDGE) {
+                        Ok(mut r) => r.pop(),
+                        Err(e) => {
+                            failed += 1;
+                            if failed <= 3 {
+                                crate::logf!("Seitenbild {} nicht erzeugt: {e}", i + 1);
+                            }
+                            None
+                        }
+                    })
+                    .collect(),
+            };
+            for (i, data) in rendered {
                 let p = i + 1;
                 if !self.img_path(p).exists() {
                     write_atomic(&self.img_path(p), &data).map_err(|e| e.to_string())?;
                 }
-                missing.remove(&p);
+            }
+            for p in &chunk {
+                missing.remove(p);
             }
             self.images_done.store(self.n - missing.len() as u32, Ordering::Relaxed);
+        }
+        if failed > 0 {
+            crate::logf!("{failed} Seitenbilder von {} nicht erzeugt", self.pdf_path.display());
         }
         Ok(())
     }

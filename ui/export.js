@@ -84,13 +84,13 @@ function buildSheet() {
     html += `<div class="item" style="--c:${col}">`;
     if (isSticky) {
       html += `<div class="sticky"><span class="lab">${esc(tr("Note"))}</span>`;
-      for (const e of ents) html += e.type === "qa" ? qaHtml(e) : `<div>${renderMD(e.text || e.a)}</div>`;
+      for (const e of ents) html += e.type === "qa" ? qaHtml(e) : `<div>${e.type === "comment" ? renderMD(e.text, { breaks: true }) : renderMD(e.a)}</div>`;
       html += `</div></div>`;
       continue;
     }
     if (n.text) html += `<blockquote class="quote ${esc(n.subtype)}"><span>${esc(n.text)}</span></blockquote>`;
     for (const e of ents) {
-      if (e.type === "comment") html += `<div class="comment"><span class="lab">${esc(tr("Comment"))}</span>${renderMD(e.text)}</div>`;
+      if (e.type === "comment") html += `<div class="comment"><span class="lab">${esc(tr("Comment"))}</span>${renderMD(e.text, { breaks: true })}</div>`;
       else html += qaHtml(e);
     }
     html += `</div>`;
@@ -101,7 +101,7 @@ function buildSheet() {
 }
 
 function qaHtml(e) {
-  return `<div class="qa">${e.q ? `<span class="lab">${esc(tr("Question"))}</span><div class="q">${renderMD(e.q)}</div>` : ""}<span class="lab">${esc(tr("Answer from Claude"))}</span><div class="a">${renderMD(e.a)}</div></div>`;
+  return `<div class="qa">${e.q ? `<span class="lab">${esc(tr("Question"))}</span><div class="q">${renderMD(e.q, { breaks: true })}</div>` : ""}<span class="lab">${esc(tr("Answer from Claude"))}</span><div class="a">${renderMD(e.a)}</div></div>`;
 }
 
 // --- Markdown ------------------------------------------------------------------

@@ -104,14 +104,22 @@ pub struct Settings {
 
 impl Settings {
     pub fn load(path: &Path) -> Settings {
-        let s: Settings = std::fs::read_to_string(path)
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_else(|| serde_json::from_str("{}").unwrap());
-        if !path.exists() {
-            let _ = s.save(path);
+        let defaults = || serde_json::from_str::<Settings>("{}").unwrap();
+        match std::fs::read_to_string(path) {
+            Ok(t) => serde_json::from_str(&t).unwrap_or_else(|e| {
+                // beschädigte Datei aufheben statt stillschweigend zu überschreiben
+                crate::logf!("einstellungen.json beschädigt ({e}), verwende Standardwerte.");
+                let _ = std::fs::rename(path, path.with_extension("defekt.json"));
+                let s = defaults();
+                let _ = s.save(path);
+                s
+            }),
+            Err(_) => {
+                let s = defaults();
+                let _ = s.save(path);
+                s
+            }
         }
-        s
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
@@ -141,9 +149,17 @@ pub fn resolve_language(settings: &mut Settings, settings_path: &Path, exe_dir: 
     if let Some(l) = std::env::var("PDFTUTOR_LANG").ok().and_then(|l| crate::i18n::normalize(&l)) {
         settings.sprache = Some(l);
     }
-    if settings.sprache.as_deref().and_then(crate::i18n::normalize).is_none() {
-        settings.sprache = Some(crate::i18n::system_lang());
-        changed = true;
+    match settings.sprache.as_deref().and_then(crate::i18n::normalize) {
+        // z. B. "DE" oder "Deutsch" von Hand eingetragen: einheitlich speichern
+        Some(l) if settings.sprache.as_deref() != Some(l.as_str()) => {
+            settings.sprache = Some(l);
+            changed = true;
+        }
+        Some(_) => {}
+        None => {
+            settings.sprache = Some(crate::i18n::system_lang());
+            changed = true;
+        }
     }
     crate::i18n::set(settings.sprache.as_deref().unwrap_or("en"));
     if changed {
