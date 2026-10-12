@@ -43,12 +43,9 @@
   </div>
   <div class="tb-right">
     <span id="docStatus" class="muted doc-status"></span>
-    <select id="modeSelect" class="tb-select" title="How much of the document Claude receives with a question" data-i18n-title>
-      <option value="auto" data-i18n>Context: automatic</option>
-      <option value="volltext" data-i18n>Context: full text</option>
-      <option value="suche" data-i18n>Context: search</option>
-    </select>
-    <select id="modelSelect" class="tb-select" title="Model for new questions" data-i18n-title></select>
+    <button id="claudeBtn" class="tb-btn text claude-btn" title="Settings for questions to Claude: context, model, reasoning depth" data-i18n-title>
+      <span id="claudeBtnLbl">Claude</span> <span class="caret">▾</span>
+    </button>
     <button id="stickyTool" class="tb-btn text tool" title="Add a sticky note: then click the desired spot on the page" data-i18n-title>
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M2.5 3.5h15v10h-8l-4.5 3.5 1-3.5H2.5z" fill="#ffd84d" stroke="#555" stroke-width="1.2" stroke-linejoin="round"/><path d="M5.5 7h9M5.5 10h6" stroke="#555" stroke-width="1.2"/></svg>
       <span class="lbl" data-i18n>Note</span></button>
@@ -121,11 +118,44 @@
     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
   </button>
 </div>
+<div id="claudePanel" class="menu panel" hidden>
+  <label class="pf"><span class="pl" data-i18n>Context</span>
+    <select id="modeSelect" class="tb-select" title="How much of the document Claude receives with a question" data-i18n-title>
+      <option value="auto" data-i18n>automatic</option>
+      <option value="volltext" data-i18n>full text</option>
+      <option value="suche" data-i18n>search</option>
+    </select>
+  </label>
+  <label class="pf"><span class="pl" data-i18n>Model</span>
+    <select id="modelSelect" class="tb-select" title="Model for new questions" data-i18n-title></select>
+  </label>
+  <label class="pf"><span class="pl" data-i18n>Reasoning depth</span>
+    <select id="effortSelect" class="tb-select">
+      <option value="" data-i18n>Default of the model</option>
+      <option value="low" data-i18n>Low</option>
+      <option value="medium" data-i18n>Medium</option>
+      <option value="high" data-i18n>High</option>
+      <option value="xhigh" data-i18n>Very high</option>
+      <option value="max" data-i18n>Maximum</option>
+    </select>
+  </label>
+  <p class="panel-hint" data-i18n>Stronger models and deeper reasoning often give better answers to hard questions, but take longer and use more of your usage limit. Applies to new questions in this document.</p>
+</div>
 <div id="moreMenu" class="menu" hidden>
   <button data-act="export" data-i18n>Create study sheet …</button>
   <button data-act="organize" data-i18n>Organize / merge pages …</button>
   <button data-act="collapse" data-i18n>Collapse all notes</button>
 </div>
+<dialog id="extraDlg" class="confirm-dlg">
+  <form method="dialog">
+    <h3 data-i18n>Use a model that may cost extra?</h3>
+    <p id="extraText"></p>
+    <div class="row">
+      <button value="cancel" class="btn" data-i18n>Cancel</button>
+      <button value="ok" class="btn primary" id="extraOk"></button>
+    </div>
+  </form>
+</dialog>
 <div id="toast" class="toast" hidden><span class="txt"></span><button class="act" hidden></button></div>
 <script type="module" src="app.js"></script>
 </body>

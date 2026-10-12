@@ -252,7 +252,7 @@ pub fn read_notes(doc: &Document) -> Vec<Note> {
             "user"
         };
         let mut meta = json!({});
-        for (k, out) in [("Model", "model"), ("Mode", "mode"), ("Seconds", "seconds")] {
+        for (k, out) in [("Model", "model"), ("Effort", "effort"), ("Mode", "mode"), ("Seconds", "seconds")] {
             if !r.meta[k].is_null() {
                 meta[out] = r.meta[k].clone();
             }

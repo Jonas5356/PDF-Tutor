@@ -25,6 +25,7 @@ const S = {
   compose: null,    // {id, mode}: Eingabefeld einer Notiz für Kommentar ("comment") oder Frage ("ask")
   tool: null,       // "sticky": nächster Klick setzt eine Haftnotiz
   undo: null,       // Beschreibung des Schritts, den Strg+Z zurücknimmt
+  effort: "",       // Denktiefe für neue Fragen ("" = Voreinstellung des Modells)
   find: { q: "", matches: [], cur: -1, texts: new Map(), run: 0 },
   sidebar: { open: false, tab: "toc", outline: null, thumbsBuilt: false },
 };
@@ -55,10 +56,47 @@ function pageLabel(num) {
   return l && l !== String(num) ? l : String(num);
 }
 
+// Kurzname des Modells für Anzeigen ("Opus (gründlicher)" -> "Opus")
 function modelLabel(id) {
   const m = (S.info?.models || []).find((m) => m.id === id);
-  return m ? m.label.replace(/\s*\(.*\)/, "") : id;
+  return m ? m.label.split(/\s[(–]/)[0] : id;
 }
+
+const EFFORT_NAMES = { low: "low", medium: "medium", high: "high", xhigh: "very high", max: "maximum" };
+const effortLabel = (e) => (e && EFFORT_NAMES[e] ? tr("depth {level}", { level: tr(EFFORT_NAMES[e]) }) : "");
+const effortShort = (e) => (e && EFFORT_NAMES[e] ? tr(EFFORT_NAMES[e]) : tr("default"));
+const isExtraModel = (id) => !!(S.info?.models || []).find((m) => m.id === id)?.extra;
+
+// Modelle, die Zusatzguthaben kosten können, farbig kennzeichnen
+function markModelSelect() {
+  const sel = $("modelSelect");
+  const extra = isExtraModel(S.model);
+  sel.classList.toggle("extra", extra);
+  sel.title = extra
+    ? tr("This model may be billed via extra usage credits, depending on your plan.")
+    : tr("Model for new questions");
+  // Knopf in der Werkzeugleiste: Modell · Denktiefe
+  const btn = $("claudeBtn");
+  $("claudeBtnLbl").textContent = `${extra ? "⚠ " : ""}${modelLabel(S.model)} · ${effortShort(S.effort)}`;
+  btn.classList.toggle("extra", extra);
+  if (extra) btn.title = tr("This model may be billed via extra usage credits, depending on your plan.");
+  else btn.title = tr("Settings for questions to Claude: context, model, reasoning depth");
+}
+
+// Einstellungen für Fragen (Kontext, Modell, Denktiefe) in einem kleinen Fenster
+const claudePanel = $("claudePanel");
+$("claudeBtn").onclick = (e) => {
+  e.stopPropagation();
+  if (!claudePanel.hidden) { claudePanel.hidden = true; return; }
+  claudePanel.hidden = false;
+  const r = $("claudeBtn").getBoundingClientRect();
+  claudePanel.style.top = `${r.bottom + 6}px`;
+  claudePanel.style.right = "auto";
+  claudePanel.style.left = `${Math.max(8, Math.min(window.innerWidth - claudePanel.offsetWidth - 8, r.right - claudePanel.offsetWidth))}px`;
+};
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#claudePanel") && !e.target.closest("#extraDlg") && !$("extraDlg").open) claudePanel.hidden = true;
+});
 
 // ---------------------------------------------------------------------------
 // PDF laden und Seiten aufbauen
@@ -81,7 +119,11 @@ async function init() {
   pollStatus();
 
   const sel = $("modelSelect");
-  for (const m of S.info.models) sel.add(new Option(m.label, m.id));
+  for (const m of S.info.models) {
+    const o = new Option(m.extra ? `⚠ ${m.label}` : m.label, m.id);
+    if (m.extra) o.className = "extra";
+    sel.add(o);
+  }
 
   const notesDoc = await api("/api/notes");
   S.notes = notesDoc.notes || [];
@@ -89,8 +131,12 @@ async function init() {
   S.undo = notesDoc.undo || null;
   updateUndo();
   const st = notesDoc.state || {};
-  S.model = st.model || S.info.defaultModel;
+  S.model = st.model && S.info.models.some((m) => m.id === st.model) ? st.model : S.info.defaultModel;
   sel.value = S.model;
+  markModelSelect();
+  S.effort = st.effort || "";
+  $("effortSelect").value = S.effort;
+  markModelSelect();
 
   S.pdf = await pdfjsLib.getDocument({ url: pdfUrl() }).promise;
   try { S.labels = await S.pdf.getPageLabels(); } catch { S.labels = null; }
@@ -367,7 +413,30 @@ $("nextPage").onclick = () => scrollToPage(currentPage() + 1);
 $("zoomIn").onclick = () => setScale(S.scale * 1.15);
 $("zoomOut").onclick = () => setScale(S.scale / 1.15);
 $("zoomFit").onclick = () => setScale(fitScale());
-$("modelSelect").onchange = (e) => { S.model = e.target.value; saveState({ model: S.model }); };
+$("modelSelect").onchange = async (e) => {
+  const id = e.target.value;
+  if (isExtraModel(id) && !(await confirmExtra(id))) {
+    e.target.value = S.model;
+    return;
+  }
+  S.model = id;
+  markModelSelect();
+  saveState({ model: S.model });
+};
+$("effortSelect").onchange = (e) => { S.effort = e.target.value; markModelSelect(); saveState({ effort: S.effort }); };
+
+// Rückfrage, bevor ein Modell mit möglichen Zusatzkosten verwendet wird
+function confirmExtra(id) {
+  const dlg = $("extraDlg");
+  const name = modelLabel(id);
+  $("extraText").textContent = tr("{model} may be billed via extra usage credits, depending on your Claude plan, and may not be available on every plan. Questions to {model} could therefore cost real money beyond your subscription.", { model: name });
+  $("extraOk").textContent = tr("Use {model}", { model: name });
+  return new Promise((resolve) => {
+    dlg.addEventListener("close", () => resolve(dlg.returnValue === "ok"), { once: true });
+    dlg.returnValue = "";
+    dlg.showModal();
+  });
+}
 $("modeSelect").onchange = async (e) => {
   try { S.doc = await api("/api/state", { mode: e.target.value }); updateDocStatus(); } catch {}
 };
@@ -390,7 +459,7 @@ function updateDocStatus() {
   }
   if (d.textReady && d.tokens != null) {
     const autoMode = d.tokens <= d.limit ? tr("full text") : tr("search");
-    $("modeSelect").options[0].textContent = tr("Context: automatic ({mode})", { mode: autoMode });
+    $("modeSelect").options[0].textContent = tr("automatic ({mode})", { mode: autoMode });
   }
   el.title = tr("Automatic: full text up to {n} tokens, search above that.", { n: fmtNum(d.limit) }) +
     (d.error ? `\n${d.error}` : "");
@@ -823,7 +892,7 @@ function buildCard(n) {
         body += `<div class="msg a">${renderMD(m.text)}</div>`;
         const u = m.usage;
         const tip = u ? tr("Input {a} · from cache {b} · written to cache {c} · output {d} tokens", { a: fmtNum(u.input_tokens), b: fmtNum(u.cache_read_input_tokens), c: fmtNum(u.cache_creation_input_tokens), d: fmtNum(u.output_tokens) }) : "";
-        body += `<div class="meta" title="${esc(tip)}">${esc(modelLabel(m.model))}${m.mode ? ` · ${modeName(m.mode)}` : ""}${m.seconds ? ` · ${m.seconds} s` : ""}${m.unsaved ? ` · <span class="unsaved" title="${esc(tr("The PDF is currently open in another program. The answer will be saved as soon as possible."))}">${esc(tr("not yet saved in the PDF"))}</span>` : ""}</div>`;
+        body += `<div class="meta" title="${esc(tip)}">${esc(modelLabel(m.model))}${m.effort ? ` · ${esc(effortLabel(m.effort))}` : ""}${m.mode ? ` · ${modeName(m.mode)}` : ""}${m.seconds ? ` · ${m.seconds} s` : ""}${m.unsaved ? ` · <span class="unsaved" title="${esc(tr("The PDF is currently open in another program. The answer will be saved as soon as possible."))}">${esc(tr("not yet saved in the PDF"))}</span>` : ""}</div>`;
       }
     });
     if (!isPending(n)) {
@@ -1138,6 +1207,7 @@ document.addEventListener("keydown", (e) => {
 
 async function ask(note, question, retry, saved = false) {
   const model = S.model;
+  const effort = S.effort || "";
   // sofort anzeigen (der Server macht dasselbe)
   if (retry) {
     const last = note.thread[note.thread.length - 1];
@@ -1145,11 +1215,11 @@ async function ask(note, question, retry, saved = false) {
   } else if (!saved) {
     note.thread.push({ role: "user", text: question, time: new Date().toISOString() });
   }
-  note.thread.push({ role: "assistant", status: "pending", model, time: new Date().toISOString(), text: "" });
+  note.thread.push({ role: "assistant", status: "pending", model, effort, time: new Date().toISOString(), text: "" });
   note.collapsed = false;
   refreshCard(note);
   try {
-    const updated = await api("/api/ask", { id: note.id, question, model, retry, saved });
+    const updated = await api("/api/ask", { id: note.id, question, model, effort, retry, saved });
     if (updated.deleted) return;
     replaceNote(prepNote(updated));
     api("/api/notes").then((d) => { S.undo = d.undo || null; S.version = d.version; updateUndo(); }).catch(() => {});

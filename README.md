@@ -15,6 +15,7 @@ The interface is available in English and German. *Deutsche Beschreibung weiter 
 - **Study sheets.** All highlights, comments and Claude answers of a document, neatly arranged by page, with formulas. Print or save as PDF, save as a standalone HTML file or as Markdown (e.g. for Obsidian).
 - **Organize pages.** Merge PDFs, reorder, rotate or remove pages. The result is saved as a new file; the originals remain unchanged and comments come along.
 - **Full-text or search mode.** For smaller documents Claude receives the complete text. In large books Claude searches for the relevant pages.
+- **Choice of model and reasoning depth.** Haiku, Sonnet, Opus or Fable, each with an adjustable reasoning depth. Models that may be billed via extra usage credits (currently Fable) are clearly marked and require a confirmation before use.
 - **Library.** "Continue reading" lists recently opened documents with your reading progress. You can also add folders, e.g. the one with your lecture notes.
 - **Your own notes for Claude.** Tell Claude what prior knowledge it can assume and how detailed explanations should be.
 

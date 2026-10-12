@@ -167,6 +167,9 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                     if let Some(m) = body["model"].as_str() {
                         e.ui.model = Some(m.to_string());
                     }
+                    if let Some(x) = body["effort"].as_str() {
+                        e.ui.effort = crate::claude::valid_effort(x);
+                    }
                     if let Some(m) = body["mode"].as_str() {
                         if ["auto", "volltext", "suche"].contains(&m) {
                             e.ui.mode = Some(m.to_string());
@@ -183,10 +186,11 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 s(body, "id"),
                 body["question"].as_str().map(|x| x.to_string()),
                 s(body, "model"),
+                s(body, "effort"),
                 body["retry"].as_bool().unwrap_or(false),
                 body["saved"].as_bool().unwrap_or(false),
             )?),
-            _ => Err(ApiError::NotFound("unbekannte Aktion".into())),
+            _ => Err(ApiError::NotFound("unknown action".into())),
         };
     }
 

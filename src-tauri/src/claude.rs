@@ -12,11 +12,22 @@ use wait_timeout::ChildExt;
 pub const TOOLS: &str = "Read,Grep,Glob"; // nur lesende Werkzeuge
 const TIMEOUT_SECS: u64 = 900;
 
+/// Modelle für Fragen. Die Kurznamen zeigen in Claude Code immer auf die neueste Version.
+/// `extra`: kann je nach Abo über Zusatzguthaben abgerechnet werden (vor der Auswahl nachfragen).
 pub fn models() -> Value {
     json!([
-        {"id": "sonnet", "label": tx("Sonnet (faster)", "Sonnet (schneller)")},
-        {"id": "opus", "label": tx("Opus (more thorough)", "Opus (gründlicher)")}
+        {"id": "haiku", "label": tx("Haiku (fastest)", "Haiku (am schnellsten)")},
+        {"id": "sonnet", "label": tx("Sonnet (balanced)", "Sonnet (ausgewogen)")},
+        {"id": "opus", "label": tx("Opus (more thorough)", "Opus (gründlicher)")},
+        {"id": "fable", "label": tx("Fable (strongest) – may cost extra", "Fable (am stärksten) – evtl. Zusatzkosten"), "extra": true}
     ])
+}
+
+/// Denktiefe (Claude Code: --effort). Leer: Voreinstellung des Modells.
+pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+
+pub fn valid_effort(e: &str) -> Option<String> {
+    EFFORTS.contains(&e).then(|| e.to_string())
 }
 pub const DEFAULT_MODEL: &str = "sonnet";
 
@@ -45,7 +56,14 @@ pub struct Answer {
 
 /// Ruft `claude -p` auf. Der Prompt geht über stdin, der gleichbleibende Teil als
 /// System-Prompt-Datei (zwischenspeicherbar).
-pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>, cwd: &Path) -> Result<Answer, String> {
+pub fn run(
+    prompt: &str,
+    model: &str,
+    effort: Option<&str>,
+    system_path: &Path,
+    session: Option<&str>,
+    cwd: &Path,
+) -> Result<Answer, String> {
     let exe = find_claude().ok_or_else(|| {
         tx(
             "Claude Code was not found. Is it installed? (Test: run 'claude --version' in PowerShell)",
@@ -56,6 +74,9 @@ pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>,
     cmd.args(["-p", "--output-format", "json", "--model", model, "--tools", TOOLS, "--allowedTools", TOOLS])
         .arg("--append-system-prompt-file")
         .arg(system_path);
+    if let Some(e) = effort.filter(|e| EFFORTS.contains(e)) {
+        cmd.args(["--effort", e]);
+    }
     if let Some(s) = session {
         cmd.args(["--resume", s]);
     }

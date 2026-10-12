@@ -20,6 +20,8 @@ pub struct UiState {
     pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collapsed: Vec<String>,
 }

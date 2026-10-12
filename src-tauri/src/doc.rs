@@ -173,7 +173,7 @@ impl Doc {
         }
         for u in self.unsaved.lock().unwrap().iter().filter(|u| u.note_id == n.id) {
             let mut m = json!({"role": "assistant", "author": CLAUDE_AUTHOR, "text": u.text, "status": "ok", "unsaved": true});
-            for (k, out) in [("Model", "model"), ("Mode", "mode"), ("Seconds", "seconds")] {
+            for (k, out) in [("Model", "model"), ("Effort", "effort"), ("Mode", "mode"), ("Seconds", "seconds")] {
                 if !u.meta[k].is_null() {
                     m[out] = u.meta[k].clone();
                 }
@@ -190,6 +190,7 @@ impl Doc {
             "lastPage": e.as_ref().and_then(|e| e.last_page),
             "scale": e.as_ref().and_then(|e| e.ui.scale),
             "model": e.as_ref().and_then(|e| e.ui.model.clone()),
+            "effort": e.as_ref().and_then(|e| e.ui.effort.clone()),
             "mode": e.as_ref().and_then(|e| e.ui.mode.clone()),
         });
         Ok(json!({
@@ -443,9 +444,11 @@ impl Doc {
         id: &str,
         question: Option<String>,
         model: &str,
+        effort: &str,
         retry: bool,
         saved: bool,
     ) -> Result<Value, String> {
+        let effort = claude::valid_effort(effort);
         let model = if claude::models().as_array().unwrap().iter().any(|m| m["id"] == model) {
             model.to_string()
         } else {
@@ -479,7 +482,7 @@ impl Doc {
             note.thread[..qi].iter().map(|m| HistoryItem { role: m.role.clone(), text: m.text.clone() }).collect();
 
         let started = Instant::now();
-        let pending = json!({"role": "assistant", "status": "pending", "model": model, "mode": mode, "time": now_iso(), "text": ""});
+        let pending = json!({"role": "assistant", "status": "pending", "model": model, "effort": effort, "mode": mode, "time": now_iso(), "text": ""});
         self.extra.lock().unwrap().insert(id.to_string(), vec![pending]);
         ctx.lib.update(&self.id, |e| e.ui.collapsed.retain(|c| c != id));
 
@@ -488,21 +491,24 @@ impl Doc {
             self.cache.ensure_images((note.page.saturating_sub(2))..=(note.page + 7));
             let sys = self.system_file(ctx, &mode)?;
             if let (Some(sess), false) = (note.session.as_deref(), history.is_empty()) {
-                match claude::run(&claude::followup_prompt(&q), &model, &sys, Some(sess), &ctx.paths.work) {
+                match claude::run(&claude::followup_prompt(&q), &model, effort.as_deref(), &sys, Some(sess), &ctx.paths.work) {
                     Ok(a) => return Ok(a),
                     Err(e) => crate::logf!("Fortsetzen der Sitzung fehlgeschlagen ({e}); starte neu mit Verlauf."),
                 }
             }
             let img = self.mark_image(ctx, &note)?;
             let prompt = claude::first_prompt(&self.cache, note.page, &note.text, &q, &mode, &[img], &history);
-            claude::run(&prompt, &model, &sys, None, &ctx.paths.work)
+            claude::run(&prompt, &model, effort.as_deref(), &sys, None, &ctx.paths.work)
         })();
         let seconds = started.elapsed().as_secs();
 
         match result {
             Ok(ans) => {
                 self.extra.lock().unwrap().remove(id);
-                let meta = json!({"Role": "assistant", "Model": model, "Mode": mode, "Seconds": seconds, "Usage": ans.usage});
+                let mut meta = json!({"Role": "assistant", "Model": model, "Mode": mode, "Seconds": seconds, "Usage": ans.usage});
+                if let Some(e) = &effort {
+                    meta["Effort"] = json!(e);
+                }
                 if let Err(e) = self.save_answer(ctx, id, &ans.text, &meta, ans.session.clone()) {
                     crate::logf!("Antwort konnte nicht gespeichert werden: {e}");
                     self.unsaved.lock().unwrap().push(Unsaved {
@@ -515,7 +521,7 @@ impl Doc {
                 }
             }
             Err(e) => {
-                let err = json!({"role": "assistant", "status": "error", "text": e, "model": model, "time": now_iso()});
+                let err = json!({"role": "assistant", "status": "error", "text": e, "model": model, "effort": effort, "time": now_iso()});
                 self.extra.lock().unwrap().insert(id.to_string(), vec![err]);
             }
         }
