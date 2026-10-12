@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,74 +15,82 @@
     <span class="wordmark">PDF-Tutor</span>
   </div>
   <div class="top-actions">
-    <input id="search" type="search" placeholder="Dokument suchen" autocomplete="off" aria-label="Dokument suchen">
-    <button id="openBtn" class="btn primary">PDF öffnen …</button>
-    <button id="folderBtn" class="btn">Ordner hinzufügen …</button>
-    <button id="organizeBtn" class="btn" title="PDFs zusammenfügen, Seiten umsortieren, drehen oder entfernen">PDFs zusammenfügen …</button>
-    <button id="settingsBtn" class="btn">Einstellungen</button>
+    <input id="search" type="search" placeholder="Search documents" data-i18n-placeholder autocomplete="off" aria-label="Search documents" data-i18n-aria-label>
+    <button id="openBtn" class="btn primary" data-i18n>Open PDF …</button>
+    <button id="folderBtn" class="btn" data-i18n>Add folder …</button>
+    <button id="organizeBtn" class="btn" title="Merge PDFs, reorder, rotate or remove pages" data-i18n-title data-i18n>Merge PDFs …</button>
+    <button id="settingsBtn" class="btn" data-i18n>Settings</button>
   </div>
 </header>
 
 <div id="banner" class="banner" hidden></div>
-<div id="updateBanner" class="banner info" hidden><span class="txt"></span> <button id="updateNow" class="btn primary">Jetzt aktualisieren</button></div>
+<div id="updateBanner" class="banner info" hidden><span class="txt"></span> <button id="updateNow" class="btn primary" data-i18n>Update now</button></div>
 
 <main id="main">
   <section id="recentSection" class="shelf-section" hidden>
-    <h2 class="shelf-title">Weiterlesen</h2>
+    <h2 class="shelf-title" data-i18n>Continue reading</h2>
     <div id="recent" class="shelf"></div>
   </section>
   <div id="folders"></div>
   <section id="empty" class="empty" hidden>
-    <h2>Deine Bibliothek ist noch leer</h2>
-    <p>Öffne ein PDF oder füge einen Ordner hinzu, etwa den mit deinen Vorlesungsunterlagen. Alle PDFs darin erscheinen dann hier.</p>
+    <h2 data-i18n>Your library is empty</h2>
+    <p data-i18n>Open a PDF or add a folder, for example the one with your lecture notes. All PDFs in it will then appear here.</p>
     <div class="empty-actions">
-      <button class="btn primary" data-act="open">PDF öffnen …</button>
-      <button class="btn" data-act="folder">Ordner hinzufügen …</button>
+      <button class="btn primary" data-act="open" data-i18n>Open PDF …</button>
+      <button class="btn" data-act="folder" data-i18n>Add folder …</button>
     </div>
   </section>
-  <p id="noResults" class="no-results" hidden>Kein Dokument passt zu dieser Suche.</p>
+  <p id="noResults" class="no-results" hidden data-i18n>No document matches this search.</p>
 </main>
 
 <div id="menu" class="menu" role="menu" hidden></div>
 
 <dialog id="settings">
   <form method="dialog" class="settings-form">
-    <h2>Einstellungen</h2>
+    <h2 data-i18n>Settings</h2>
     <label class="field">
-      <span class="field-label">Hinweise an Claude</span>
-      <span class="field-help">Was Claude über dich wissen soll und wie die Antworten aussehen sollen. Gilt für alle Dokumente.</span>
+      <span class="field-label" data-i18n>Language</span>
+      <select id="setSprache" class="text-input">
+        <option value="en">English</option>
+        <option value="de">Deutsch</option>
+      </select>
+    </label>
+    <label class="field">
+      <span class="field-label" data-i18n>Notes for Claude</span>
+      <span class="field-help" data-i18n>What Claude should know about you and how answers should look. Applies to all documents.</span>
       <textarea id="setHinweise" rows="8"></textarea>
     </label>
     <label class="field">
-      <span class="field-label">Volltext bis</span>
-      <span class="field-help">Ist ein Dokument kleiner, bekommt Claude bei jeder Frage den ganzen Text mit. Größere Dokumente werden durchsucht. Etwa 30.000 Tokens entsprechen 50–60 Buchseiten oder einem langen Foliensatz.</span>
-      <span class="inline"><input id="setGrenze" type="number" min="0" step="1000"> Tokens</span>
+      <span class="field-label" data-i18n>Full text up to</span>
+      <span class="field-help" data-i18n>If a document is smaller, Claude receives its whole text with every question. Larger documents are searched. About 30,000 tokens correspond to 50–60 book pages or a long slide deck.</span>
+      <span class="inline"><input id="setGrenze" type="number" min="0" step="1000"> <span data-i18n>tokens</span></span>
     </label>
     <label class="field">
-      <span class="field-label">Dein Name</span>
-      <span class="field-help">Steht als Autor bei deinen Markierungen und Kommentaren im PDF. Andere Programme wie Acrobat zeigen ihn an.</span>
+      <span class="field-label" data-i18n>Your name</span>
+      <span class="field-help" data-i18n>Stored as the author of your highlights and comments in the PDF. Other programs such as Acrobat display it.</span>
       <input id="setAutor" type="text" class="text-input" autocomplete="off">
     </label>
     <label class="field check">
       <input id="setBackup" type="checkbox">
-      <span><span class="field-label">Sicherheitskopie</span>
-      <span class="field-help">Bevor der PDF-Tutor ein PDF zum ersten Mal verändert, legt er eine Kopie im Datenordner ab.</span></span>
+      <span><span class="field-label" data-i18n>Backup copy</span>
+      <span class="field-help" data-i18n>Before PDF-Tutor changes a PDF for the first time, it stores a copy in the data folder.</span></span>
     </label>
     <div class="settings-links">
-      <button type="button" class="link-btn" id="openData">Datenordner öffnen</button>
-      <button type="button" class="link-btn" id="openLog">Protokoll öffnen</button>
-      <button type="button" class="link-btn" id="checkUpdate">Nach Updates suchen</button>
+      <button type="button" class="link-btn" id="openData" data-i18n>Open data folder</button>
+      <button type="button" class="link-btn" id="openLog" data-i18n>Open log file</button>
+      <button type="button" class="link-btn" id="checkUpdate" data-i18n>Check for updates</button>
       <span id="versionInfo" class="muted"></span>
     </div>
     <div id="updateInfo" class="field-help"></div>
     <div class="dialog-actions">
-      <button id="saveSettings" value="save" class="btn primary">Speichern</button>
-      <button value="cancel" class="btn">Abbrechen</button>
+      <button id="saveSettings" value="save" class="btn primary" data-i18n>Save</button>
+      <button value="cancel" class="btn" data-i18n>Cancel</button>
     </div>
   </form>
 </dialog>
 
 <script src="bridge.js"></script>
+<script src="i18n.js"></script>
 <script src="home.js"></script>
 </body>
 </html>

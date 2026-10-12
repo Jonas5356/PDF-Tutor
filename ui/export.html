@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lernzettel – PDF-Tutor</title>
+<title>Study sheet – PDF-Tutor</title>
 <link rel="icon" href="icon.png">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="tokens.css">
@@ -13,21 +13,22 @@
 <script src="vendor/marked.min.js"></script>
 <script src="vendor/purify.min.js"></script>
 <script src="bridge.js"></script>
+<script src="i18n.js"></script>
 </head>
 <body>
 <header class="ex-bar">
-  <div class="ex-title">Lernzettel</div>
+  <div class="ex-title" data-i18n>Study sheet</div>
   <div class="ex-opts">
-    <label><input type="checkbox" id="optPlain" checked> Markierungen ohne Kommentar</label>
-    <label><input type="checkbox" id="optComments" checked> Eigene Kommentare</label>
-    <label><input type="checkbox" id="optClaude" checked> Fragen und Antworten von Claude</label>
-    <label><input type="checkbox" id="optSticky" checked> Haftnotizen</label>
-    <span class="ex-colors" id="optColors" title="Nur diese Farben (keine Auswahl: alle)"></span>
+    <label><input type="checkbox" id="optPlain" checked> <span data-i18n>Highlights without comment</span></label>
+    <label><input type="checkbox" id="optComments" checked> <span data-i18n>Own comments</span></label>
+    <label><input type="checkbox" id="optClaude" checked> <span data-i18n>Questions and answers from Claude</span></label>
+    <label><input type="checkbox" id="optSticky" checked> <span data-i18n>Sticky notes</span></label>
+    <span class="ex-colors" id="optColors" title="Only these colors (none selected: all)" data-i18n-title></span>
   </div>
   <div class="ex-actions">
-    <button id="printBtn" class="btn primary">Drucken / als PDF …</button>
-    <button id="htmlBtn" class="btn">Als HTML …</button>
-    <button id="mdBtn" class="btn">Als Markdown …</button>
+    <button id="printBtn" class="btn primary" data-i18n>Print / save as PDF …</button>
+    <button id="htmlBtn" class="btn" data-i18n>As HTML …</button>
+    <button id="mdBtn" class="btn" data-i18n>As Markdown …</button>
   </div>
 </header>
 <div id="banner" class="banner" hidden></div>

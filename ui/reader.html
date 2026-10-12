@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,57 +12,58 @@
 <script src="vendor/marked.min.js"></script>
 <script src="vendor/purify.min.js"></script>
 <script src="bridge.js"></script>
+<script src="i18n.js"></script>
 </head>
 <body>
 <header id="toolbar">
   <div class="tb-left">
-    <a id="homeBtn" class="tb-btn home-btn" href="index.html" title="Zur Bibliothek">‹ Bibliothek</a>
-    <button id="sidebarBtn" class="tb-btn" title="Seitenleiste: Inhalt, Seiten, Notizen">
+    <a id="homeBtn" class="tb-btn home-btn" href="index.html" title="To the library" data-i18n-title data-i18n>‹ Library</a>
+    <button id="sidebarBtn" class="tb-btn" title="Sidebar: contents, pages, notes" data-i18n-title>
       <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg>
     </button>
-    <span id="bookTitle" class="book-title">Lade …</span>
+    <span id="bookTitle" class="book-title" data-i18n>Loading …</span>
   </div>
   <div class="tb-center">
-    <button id="prevPage" class="tb-btn" title="Vorherige Seite">‹</button>
-    <label class="page-nav">Seite
+    <button id="prevPage" class="tb-btn" title="Previous page" data-i18n-title>‹</button>
+    <label class="page-nav"><span data-i18n>Page</span>
       <input id="pageInput" type="text" inputmode="numeric" autocomplete="off">
       <span id="pageCount">/ –</span>
     </label>
     <span id="pageLabel" class="muted"></span>
-    <button id="nextPage" class="tb-btn" title="Nächste Seite">›</button>
+    <button id="nextPage" class="tb-btn" title="Next page" data-i18n-title>›</button>
     <span class="sep"></span>
-    <button id="zoomOut" class="tb-btn" title="Verkleinern">−</button>
+    <button id="zoomOut" class="tb-btn" title="Zoom out" data-i18n-title>−</button>
     <span id="zoomVal" class="zoom-val">100 %</span>
-    <button id="zoomIn" class="tb-btn" title="Vergrößern">+</button>
-    <button id="zoomFit" class="tb-btn text" title="Auf Breite einpassen">Breite</button>
+    <button id="zoomIn" class="tb-btn" title="Zoom in" data-i18n-title>+</button>
+    <button id="zoomFit" class="tb-btn text" title="Fit to width" data-i18n-title data-i18n>Width</button>
     <span class="sep"></span>
-    <button id="findBtn" class="tb-btn" title="Im Dokument suchen (Strg+F)">
+    <button id="findBtn" class="tb-btn" title="Search in document (Ctrl+F)" data-i18n-title>
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.2 10.2l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     </button>
   </div>
   <div class="tb-right">
     <span id="docStatus" class="muted doc-status"></span>
-    <select id="modeSelect" class="tb-select" title="Wie viel vom Dokument Claude bei einer Frage mitbekommt">
-      <option value="auto">Kontext: automatisch</option>
-      <option value="volltext">Kontext: Volltext</option>
-      <option value="suche">Kontext: Suche</option>
+    <select id="modeSelect" class="tb-select" title="How much of the document Claude receives with a question" data-i18n-title>
+      <option value="auto" data-i18n>Context: automatic</option>
+      <option value="volltext" data-i18n>Context: full text</option>
+      <option value="suche" data-i18n>Context: search</option>
     </select>
-    <select id="modelSelect" class="tb-select" title="Modell für neue Fragen"></select>
-    <button id="stickyTool" class="tb-btn text tool" title="Haftnotiz setzen: danach auf die gewünschte Stelle der Seite klicken">
+    <select id="modelSelect" class="tb-select" title="Model for new questions" data-i18n-title></select>
+    <button id="stickyTool" class="tb-btn text tool" title="Add a sticky note: then click the desired spot on the page" data-i18n-title>
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M2.5 3.5h15v10h-8l-4.5 3.5 1-3.5H2.5z" fill="#ffd84d" stroke="#555" stroke-width="1.2" stroke-linejoin="round"/><path d="M5.5 7h9M5.5 10h6" stroke="#555" stroke-width="1.2"/></svg>
-      <span class="lbl">Notiz</span></button>
-    <button id="undoBtn" class="tb-btn" title="Nichts rückgängig zu machen" disabled>↶</button>
-    <button id="collapseAll" class="tb-btn text" title="Alle Notizen einklappen">Einklappen</button>
-    <button id="moreBtn" class="tb-btn" title="Weitere Funktionen">⋯</button>
+      <span class="lbl" data-i18n>Note</span></button>
+    <button id="undoBtn" class="tb-btn" title="Nothing to undo" data-i18n-title disabled>↶</button>
+    <button id="collapseAll" class="tb-btn text" title="Collapse all notes" data-i18n-title data-i18n>Collapse</button>
+    <button id="moreBtn" class="tb-btn" title="More functions" data-i18n-title>⋯</button>
   </div>
 </header>
 <div id="banner" class="banner" hidden></div>
 <div id="main">
 <aside id="sidebar" hidden>
   <div class="sb-tabs">
-    <button class="sb-tab" data-tab="toc">Inhalt</button>
-    <button class="sb-tab" data-tab="thumbs">Seiten</button>
-    <button class="sb-tab" data-tab="notes">Notizen</button>
+    <button class="sb-tab" data-tab="toc" data-i18n>Contents</button>
+    <button class="sb-tab" data-tab="thumbs" data-i18n>Pages</button>
+    <button class="sb-tab" data-tab="notes" data-i18n>Notes</button>
   </div>
   <div class="sb-pane" id="sbToc" data-tab="toc"></div>
   <div class="sb-pane" id="sbThumbs" data-tab="thumbs" hidden></div>
@@ -70,11 +71,11 @@
     <div class="sb-filter">
       <div id="sbNoteColors" class="sb-colors"></div>
       <select id="sbNoteKind" class="tb-select">
-        <option value="all">Alle</option>
-        <option value="comment">mit Kommentar</option>
-        <option value="claude">mit Claude</option>
-        <option value="plain">nur Markierungen</option>
-        <option value="sticky">Haftnotizen</option>
+        <option value="all" data-i18n>All</option>
+        <option value="comment" data-i18n>with comment</option>
+        <option value="claude" data-i18n>with Claude</option>
+        <option value="plain" data-i18n>highlights only</option>
+        <option value="sticky" data-i18n>Sticky notes</option>
       </select>
     </div>
     <div id="sbNoteCount" class="sb-count"></div>
@@ -85,45 +86,45 @@
   <div id="content">
     <div id="pages"></div>
     <aside id="notes">
-      <div id="notesEmpty" class="notes-empty">Markiere eine Stelle im Text, um sie hervorzuheben, zu kommentieren oder <b>Claude zu fragen</b>. Mit <b>Notiz</b> setzt du eine Haftnotiz an eine beliebige Stelle.</div>
+      <div id="notesEmpty" class="notes-empty" data-i18n-html>Select a passage in the text to highlight it, comment on it or <b>ask Claude</b>. With <b>Note</b> you can place a sticky note anywhere.</div>
     </aside>
   </div>
 </main>
 <div id="findBar" class="findbar" hidden>
-  <input id="findInput" type="text" placeholder="Im Dokument suchen …" autocomplete="off" spellcheck="false">
+  <input id="findInput" type="text" placeholder="Search in document …" data-i18n-placeholder autocomplete="off" spellcheck="false">
   <span id="findCount" class="find-count"></span>
-  <button id="findPrev" class="fb" title="Vorheriger Treffer (Umschalt+Enter)">↑</button>
-  <button id="findNext" class="fb" title="Nächster Treffer (Enter)">↓</button>
-  <button id="findClose" class="fb" title="Schließen (Esc)">×</button>
+  <button id="findPrev" class="fb" title="Previous match (Shift+Enter)" data-i18n-title>↑</button>
+  <button id="findNext" class="fb" title="Next match (Enter)" data-i18n-title>↓</button>
+  <button id="findClose" class="fb" title="Close (Esc)" data-i18n-title>×</button>
 </div>
 </div>
 <div id="selBar" class="floatbar" hidden>
   <span class="swatches"></span>
   <span class="fsep"></span>
-  <button class="fb kind" data-kind="Underline" title="Unterstreichen (in der zuletzt gewählten Farbe)"><u>U</u></button>
-  <button class="fb kind" data-kind="StrikeOut" title="Durchstreichen (in der zuletzt gewählten Farbe)"><s>S</s></button>
+  <button class="fb kind" data-kind="Underline" title="Underline (in the last chosen color)" data-i18n-title><u>U</u></button>
+  <button class="fb kind" data-kind="StrikeOut" title="Strike out (in the last chosen color)" data-i18n-title><s>S</s></button>
   <span class="fsep"></span>
-  <button class="fb" data-act="comment">Kommentar</button>
-  <button class="fb primary" data-act="ask">Claude fragen</button>
+  <button class="fb" data-act="comment" data-i18n>Comment</button>
+  <button class="fb primary" data-act="ask" data-i18n>Ask Claude</button>
 </div>
 <div id="markBar" class="floatbar" hidden>
   <span class="swatches"></span>
   <span class="fsep"></span>
-  <button class="fb kind" data-kind="Highlight" title="Hervorheben"><span class="hl-ico">ab</span></button>
-  <button class="fb kind" data-kind="Underline" title="Unterstreichen"><u>U</u></button>
-  <button class="fb kind" data-kind="StrikeOut" title="Durchstreichen"><s>S</s></button>
+  <button class="fb kind" data-kind="Highlight" title="Highlight text" data-i18n-title><span class="hl-ico">ab</span></button>
+  <button class="fb kind" data-kind="Underline" title="Underline text" data-i18n-title><u>U</u></button>
+  <button class="fb kind" data-kind="StrikeOut" title="Strike out" data-i18n-title><s>S</s></button>
   <span class="fsep"></span>
-  <button class="fb" data-act="comment">Kommentar</button>
-  <button class="fb" data-act="ask">Claude fragen</button>
+  <button class="fb" data-act="comment" data-i18n>Comment</button>
+  <button class="fb" data-act="ask" data-i18n>Ask Claude</button>
   <span class="fsep"></span>
-  <button class="fb del" data-act="delete" title="Löschen (Strg+Z macht es rückgängig)">
+  <button class="fb del" data-act="delete" title="Delete (Ctrl+Z undoes it)" data-i18n-title>
     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
   </button>
 </div>
 <div id="moreMenu" class="menu" hidden>
-  <button data-act="export">Lernzettel erstellen …</button>
-  <button data-act="organize">Seiten organisieren / zusammenfügen …</button>
-  <button data-act="collapse">Alle Notizen einklappen</button>
+  <button data-act="export" data-i18n>Create study sheet …</button>
+  <button data-act="organize" data-i18n>Organize / merge pages …</button>
+  <button data-act="collapse" data-i18n>Collapse all notes</button>
 </div>
 <div id="toast" class="toast" hidden><span class="txt"></span><button class="act" hidden></button></div>
 <script type="module" src="app.js"></script>

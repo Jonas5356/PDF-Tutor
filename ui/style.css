@@ -117,8 +117,7 @@ button { font: inherit; color: inherit; }
 .card-body { padding: 0 12px 10px; }
 .msg { margin: 6px 0; overflow-wrap: anywhere; }
 .msg.q { font-weight: 600; }
-.msg.q::before, .msg.c::before { content: "Frage"; display: block; font-family: var(--font); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.msg.c::before { content: "Kommentar"; }
+.msg.q::before, .msg.c::before { content: attr(data-label); display: block; font-family: var(--font); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .msg.c { font-weight: 400; font-family: var(--font-read); font-size: 15px; }
 .msg.c p, .msg.q p { margin: .2em 0; }
 .msg :is(.q, .c) { position: relative; }

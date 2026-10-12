@@ -1,6 +1,7 @@
 //! Claude Code aufrufen (`claude -p`) und die Prompts zusammenstellen.
 
 use crate::cache::PageCache;
+use crate::i18n::tx;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -13,8 +14,8 @@ const TIMEOUT_SECS: u64 = 900;
 
 pub fn models() -> Value {
     json!([
-        {"id": "sonnet", "label": "Sonnet (schneller)"},
-        {"id": "opus", "label": "Opus (gründlicher)"}
+        {"id": "sonnet", "label": tx("Sonnet (faster)", "Sonnet (schneller)")},
+        {"id": "opus", "label": tx("Opus (more thorough)", "Opus (gründlicher)")}
     ])
 }
 pub const DEFAULT_MODEL: &str = "sonnet";
@@ -46,7 +47,10 @@ pub struct Answer {
 /// System-Prompt-Datei (zwischenspeicherbar).
 pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>, cwd: &Path) -> Result<Answer, String> {
     let exe = find_claude().ok_or_else(|| {
-        "Claude Code wurde nicht gefunden. Ist es installiert? (Test: in der PowerShell 'claude --version' eingeben)".to_string()
+        tx(
+            "Claude Code was not found. Is it installed? (Test: run 'claude --version' in PowerShell)",
+            "Claude Code wurde nicht gefunden. Ist es installiert? (Test: in der PowerShell 'claude --version' eingeben)",
+        )
     })?;
     let mut cmd = Command::new(&exe);
     cmd.args(["-p", "--output-format", "json", "--model", model, "--tools", TOOLS, "--allowedTools", TOOLS])
@@ -61,7 +65,7 @@ pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>,
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let mut child = cmd.spawn().map_err(|e| format!("Claude Code konnte nicht gestartet werden: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| tx(&format!("Claude Code could not be started: {e}"), &format!("Claude Code konnte nicht gestartet werden: {e}")))?;
     let mut stdin = child.stdin.take().unwrap();
     let input = prompt.as_bytes().to_vec();
     let writer = std::thread::spawn(move || {
@@ -84,7 +88,8 @@ pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>,
         None => {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!("Claude hat nicht innerhalb von {} Minuten geantwortet.", TIMEOUT_SECS / 60));
+            let m = TIMEOUT_SECS / 60;
+            return Err(tx(&format!("Claude did not answer within {m} minutes."), &format!("Claude hat nicht innerhalb von {m} Minuten geantwortet.")));
         }
     };
     let _ = writer.join();
@@ -103,9 +108,9 @@ pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>,
     let result = match result.or_else(|| serde_json::from_str(&out).ok()) {
         Some(r) => r,
         None => {
-            let detail = if !err.is_empty() { err } else if !out.is_empty() { out } else { format!("Exit-Code {status}") };
+            let detail = if !err.is_empty() { err } else if !out.is_empty() { out } else { format!("exit code {status}") };
             let tail: String = detail.chars().rev().take(1500).collect::<Vec<_>>().into_iter().rev().collect();
-            return Err(format!("Unerwartete Ausgabe von Claude Code:\n{tail}"));
+            return Err(tx(&format!("Unexpected output from Claude Code:\n{tail}"), &format!("Unerwartete Ausgabe von Claude Code:\n{tail}")));
         }
     };
     let ok_subtype = result["subtype"].as_str().map(|s| s == "success").unwrap_or(true);
@@ -114,12 +119,12 @@ pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>,
             .as_str()
             .or(result["subtype"].as_str())
             .map(|s| s.to_string())
-            .unwrap_or_else(|| if err.is_empty() { "unbekannter Fehler".into() } else { err.clone() });
-        return Err(format!("Claude Code meldet einen Fehler: {detail}"));
+            .unwrap_or_else(|| if err.is_empty() { tx("unknown error", "unbekannter Fehler") } else { err.clone() });
+        return Err(tx(&format!("Claude Code reports an error: {detail}"), &format!("Claude Code meldet einen Fehler: {detail}")));
     }
     let text = result["result"].as_str().unwrap_or("").trim().to_string();
     if text.is_empty() {
-        return Err("Claude Code hat eine leere Antwort geliefert.".into());
+        return Err(tx("Claude Code returned an empty answer.", "Claude Code hat eine leere Antwort geliefert."));
     }
     let u = &result["usage"];
     let usage = json!({
@@ -134,65 +139,74 @@ pub fn run(prompt: &str, model: &str, system_path: &Path, session: Option<&str>,
 // ---------------------------------------------------------------------------
 // Prompts
 
-pub const FORMAT_HINWEIS: &str = "Formatierung deiner Antwort: Markdown. Formeln in LaTeX, inline mit $...$, abgesetzt mit $$...$$. \
-Keine Überschrift erster Ebene. Beginne direkt mit der Erklärung, ohne Einleitungsfloskel und ohne \
-die Frage zu wiederholen. Nenne die Seiten, auf die du dich stützt, wenn es nicht nur die markierte ist.";
+// Die Anweisungen an Claude sind englisch; geantwortet wird in der Sprache der Frage.
 
-pub fn system_text(c: &PageCache, mode: &str, hinweise: &str) -> String {
+pub const FORMAT_HINT: &str = "Format of your answer: Markdown. Math in LaTeX, inline with $...$, displayed with $$...$$. \
+No first-level heading. Start directly with the explanation, without an introductory phrase and without \
+repeating the question. Mention the pages you rely on if they are not just the highlighted one.";
+
+pub const LANGUAGE_RULE: &str = "Answer in the language in which the reader asks the question, regardless of the \
+language of the document or of these instructions. Only if the question explicitly asks for a different language \
+(e.g. \"answer in English\" / \"antworte auf Deutsch\"), use that language. Keep technical terms from the \
+document where helpful.";
+
+pub fn system_text(c: &PageCache, mode: &str, hints: &str) -> String {
     let nn = "N".repeat(c.digits);
     let sep = std::path::MAIN_SEPARATOR;
     let mut parts: Vec<String> = vec![
-        "# Rolle".into(),
-        "Du hilfst beim Durcharbeiten eines Dokuments (Fachbuch, Skript oder Vorlesungsfolien). Der Leser \
-markiert Stellen und stellt Fragen dazu. Deine Antworten erscheinen in einer Randspalte neben dem \
-Dokument."
+        "# Role".into(),
+        "You help the reader work through a document (textbook, lecture notes or lecture slides). The reader \
+highlights passages and asks questions about them. Your answers appear in a margin column next to the \
+document."
             .into(),
         String::new(),
-        "# Zugriff auf das Dokument".into(),
-        format!("- Text jeder Seite: {}{sep}seite_{nn}.txt", c.text_dir.display()),
-        format!("- Bild jeder Seite: {}{sep}seite_{nn}.jpg", c.img_dir.display()),
-        format!("  ({nn} = PDF-Seitenzahl mit führenden Nullen, z. B. seite_{:0w$}.txt)", 1, w = c.digits),
-        "- Der Text ist automatisch extrahiert. Formeln, Tabellen, Diagramme und Folienlayouts sind darin oft \
-unvollständig oder verstümmelt. Wenn es darauf ankommt, sieh dir das Bild der Seite mit dem \
-Read-Werkzeug an."
+        "# Language".into(),
+        LANGUAGE_RULE.into(),
+        String::new(),
+        "# Access to the document".into(),
+        format!("- Text of each page: {}{sep}seite_{nn}.txt", c.text_dir.display()),
+        format!("- Image of each page: {}{sep}seite_{nn}.jpg", c.img_dir.display()),
+        format!("  ({nn} = PDF page number with leading zeros, e.g. seite_{:0w$}.txt)", 1, w = c.digits),
+        "- The text is extracted automatically. Formulas, tables, diagrams and slide layouts are often \
+incomplete or garbled in it. When they matter, look at the image of the page with the Read tool."
             .into(),
-        "- „Diese Seite“ bzw. „diese Folie“ meint die Seite der Markierung. Angaben wie „die nächsten 5 Folien“, \
-„Seite 87“, „Abschnitt 3.2“ oder „Kapitel 4“ löst du über die PDF-Seitenzahlen, die gedruckten \
-Seitenzahlen und das Inhaltsverzeichnis in der Übersicht auf und liest dann die betreffenden Seiten."
+        "- \"This page\" or \"this slide\" refers to the page of the highlight. References such as \"the next \
+5 slides\", \"page 87\", \"section 3.2\" or \"chapter 4\" are resolved via the PDF page numbers, the printed \
+page numbers and the table of contents in the overview; then read the pages concerned."
             .into(),
-        "- Gedruckte Seitenzahlen können von den PDF-Seitenzahlen abweichen. Nennt der Leser eine Seitenzahl, \
-ist im Zweifel die gedruckte gemeint."
+        "- Printed page numbers can differ from PDF page numbers. If the reader names a page number, the \
+printed one is meant when in doubt."
             .into(),
-        "- Fehlt ein Seitenbild noch (der Reader erzeugt sie im Hintergrund), nutze den Text.".into(),
-        "- Lies das Original-PDF nicht direkt, sondern nur diese Dateien.".into(),
+        "- If a page image does not exist yet (the reader creates them in the background), use the text.".into(),
+        "- Do not read the original PDF directly, only these files.".into(),
     ];
     if mode == "suche" {
         parts.push(format!(
-            "- Um Stellen zu finden (wo ein Begriff oder Symbol eingeführt wird, frühere Beispiele, \
-Definitionen), durchsuche den Ordner {} mit dem Grep-Werkzeug. Der Dateiname nennt die Seite.",
+            "- To find passages (where a term or symbol is introduced, earlier examples, definitions), search \
+the folder {} with the Grep tool. The file name gives the page.",
             c.text_dir.display()
         ));
-        parts.push("- Lies gezielt, was du für die Antwort brauchst, nicht das ganze Dokument.".into());
+        parts.push("- Read selectively what you need for the answer, not the whole document.".into());
     } else {
         parts.push(
-            "- Der vollständige Text des Dokuments steht unten. Für Formeln und Abbildungen sieh dir trotzdem \
-die Seitenbilder an."
+            "- The complete text of the document is below. For formulas and figures, still look at the page \
+images."
                 .into(),
         );
     }
-    if !hinweise.is_empty() {
+    if !hints.is_empty() {
         parts.push(String::new());
-        parts.push("# Hinweise des Lesers zu sich selbst und zu den Antworten".into());
-        parts.push(hinweise.to_string());
+        parts.push("# Notes from the reader about themselves and the answers".into());
+        parts.push(hints.to_string());
     }
     parts.push(String::new());
     parts.push("# Format".into());
-    parts.push(FORMAT_HINWEIS.into());
+    parts.push(FORMAT_HINT.into());
     parts.push(String::new());
     parts.push(c.overview_text());
     if mode == "volltext" {
         parts.push(String::new());
-        parts.push("# Vollständiger Text des Dokuments".into());
+        parts.push("# Complete text of the document".into());
         parts.push(String::new());
         parts.push(c.fulltext());
     }
@@ -214,26 +228,26 @@ pub fn first_prompt(
     history: &[HistoryItem],
 ) -> String {
     let mut parts: Vec<String> = vec![
-        "Neue Frage zu einer markierten Stelle.".into(),
-        format!("Dokument: {}", c.title),
-        format!("Stelle: {}", c.page_name(page)),
+        "New question about a highlighted passage.".into(),
+        format!("Document: {}", c.title),
+        format!("Location: {}", c.page_name(page)),
         String::new(),
-        "Markierter Text (automatisch extrahiert, Formeln darin oft verstümmelt):".into(),
+        "Highlighted text (extracted automatically, formulas in it are often garbled):".into(),
         "\"\"\"".into(),
         selected.trim().to_string(),
         "\"\"\"".into(),
         String::new(),
-        "Bild der Seite, auf dem die markierte Stelle farbig hinterlegt und rot umrandet ist:".into(),
+        "Image of the page, with the highlighted passage shaded and outlined in red:".into(),
     ];
     for i in images {
         parts.push(format!("- {}", i.display()));
     }
-    parts.push("Sieh dir dieses Bild zuerst an.".into());
+    parts.push("Look at this image first.".into());
     if mode == "suche" {
         let lo = page.saturating_sub(2).max(1);
         let hi = (page + 2).min(c.n);
         parts.push(String::new());
-        parts.push(format!("Zur Orientierung der Text der umliegenden Seiten ({lo}–{hi}):"));
+        parts.push(format!("For orientation, the text of the surrounding pages ({lo}–{hi}):"));
         for q in lo..=hi {
             parts.push(format!("===== {} =====", c.page_name(q)));
             parts.push(c.page_text(q).chars().take(5000).collect());
@@ -241,18 +255,21 @@ pub fn first_prompt(
     }
     if !history.is_empty() {
         parts.push(String::new());
-        parts.push("Bisheriger Gesprächsverlauf zu dieser Stelle:".into());
+        parts.push("Conversation so far about this passage:".into());
         for m in history {
-            let who = if m.role == "user" { "Leser" } else { "Du" };
+            let who = if m.role == "user" { "Reader" } else { "You" };
             parts.push(format!("[{who}]: {}", m.text));
         }
     }
     parts.push(String::new());
-    parts.push("Frage des Lesers:".into());
+    parts.push("Question from the reader (answer in its language):".into());
     parts.push(question.trim().to_string());
     parts.join("\n")
 }
 
 pub fn followup_prompt(question: &str) -> String {
-    format!("Nachfrage des Lesers zur selben markierten Stelle:\n{}", question.trim())
+    format!(
+        "Follow-up question from the reader about the same highlighted passage (answer in its language):\n{}",
+        question.trim()
+    )
 }

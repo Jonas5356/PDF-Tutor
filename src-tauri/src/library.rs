@@ -190,7 +190,7 @@ impl Library {
         let new_path = std::path::absolute(new_path).unwrap_or_else(|_| new_path.to_path_buf());
         let mut d = self.data.lock().unwrap();
         if !d.docs.contains_key(id) {
-            return Err("Dokument nicht gefunden".into());
+            return Err(crate::i18n::tx("Document not found", "Dokument nicht gefunden"));
         }
         if let Some(other) = Self::find_by_path(&d, &new_path) {
             if other != id {

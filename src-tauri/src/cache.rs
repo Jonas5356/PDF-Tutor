@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-const CACHE_VERSION: u64 = 2;
+const CACHE_VERSION: u64 = 3;
 const MAX_EDGE: i32 = 1600;
 const CHARS_PER_TOKEN: f64 = 3.3;
 const CHUNK: usize = 6;
@@ -58,7 +58,7 @@ pub fn nice_title(meta: &str, path: &Path) -> String {
 
 impl PageCache {
     pub fn open(pdf_path: &Path, work: &Path) -> Result<Arc<PageCache>, String> {
-        let bytes = std::fs::read(pdf_path).map_err(|e| format!("PDF kann nicht gelesen werden: {e}"))?;
+        let bytes = std::fs::read(pdf_path).map_err(|e| crate::i18n::tx(&format!("The PDF cannot be read: {e}"), &format!("PDF kann nicht gelesen werden: {e}")))?;
         let info = pdfium_host::doc_info(&bytes)?;
         let key = &sha1_hex(norm_path(pdf_path).as_bytes())[..10];
         let stem = pdf_path.file_stem().unwrap_or_default().to_string_lossy();
@@ -124,16 +124,16 @@ impl PageCache {
     pub fn page_name(&self, p: u32) -> String {
         let l = self.label(p);
         if l == p.to_string() {
-            format!("Seite {p}")
+            format!("page {p}")
         } else {
-            format!("Seite {p} (gedruckt: {l})")
+            format!("page {p} (printed: {l})")
         }
     }
 
     fn run(self: Arc<Self>, bytes: Vec<u8>, fp: String) {
         if let Err(e) = self.build_text(&bytes, &fp) {
             crate::logf!("Seitentexte: {e}");
-            *self.error.lock().unwrap() = Some(format!("Text konnte nicht extrahiert werden: {e}"));
+            *self.error.lock().unwrap() = Some(crate::i18n::tx(&format!("Text could not be extracted: {e}"), &format!("Text konnte nicht extrahiert werden: {e}")));
         }
         {
             let (m, cv) = &self.text_ready;
@@ -161,10 +161,17 @@ impl PageCache {
                 }
             }
         }
-        // alter Cache (anderes Dokument oder ältere Version): Bilder neu erzeugen
-        if let Ok(rd) = std::fs::read_dir(&self.img_dir) {
-            for e in rd.flatten() {
-                let _ = std::fs::remove_file(e.path());
+        // Bilder nur verwerfen, wenn sich das Dokument geändert hat (nicht bei neuer Cache-Version)
+        let same_doc = std::fs::read_to_string(&meta_path)
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .map(|m| m["pages"].as_u64() == Some(self.n as u64) && m["fingerprint"].as_str() == Some(fp))
+            .unwrap_or(false);
+        if !same_doc {
+            if let Ok(rd) = std::fs::read_dir(&self.img_dir) {
+                for e in rd.flatten() {
+                    let _ = std::fs::remove_file(e.path());
+                }
             }
         }
         let mut full = String::new();
@@ -197,33 +204,31 @@ impl PageCache {
             let mut out = String::new();
             for (i, c) in s.chars().enumerate() {
                 if i > 0 && (s.len() - i) % 3 == 0 {
-                    out.push('.');
+                    out.push(',');
                 }
                 out.push(c);
             }
             out
         };
         let mut lines = vec![
-            format!("# Übersicht: {}", self.title),
+            format!("# Overview: {}", self.title),
             String::new(),
-            format!("Datei: {}", self.pdf_path.file_name().unwrap_or_default().to_string_lossy()),
-            format!("Seitenzahl: {} (PDF-Seiten 1–{})", self.n, self.n),
-            format!("Geschätzter Textumfang: etwa {} Tokens", fmt_num(tokens)),
+            format!("File: {}", self.pdf_path.file_name().unwrap_or_default().to_string_lossy()),
+            format!("Number of pages: {} (PDF pages 1–{})", self.n, self.n),
+            format!("Estimated text length: about {} tokens", fmt_num(tokens)),
             String::new(),
-            "## Gedruckte Seitenzahlen".into(),
+            "## Printed page numbers".into(),
         ];
         lines.extend(self.label_ranges());
         lines.push(String::new());
-        lines.push("## Inhaltsverzeichnis (aus den Lesezeichen des PDFs)".into());
+        lines.push("## Table of contents (from the PDF's bookmarks)".into());
         if self.toc.is_empty() {
-            lines.push(
-                "Keine Lesezeichen vorhanden. Abschnitte bei Bedarf über die Suche in den Seitentexten finden.".into(),
-            );
+            lines.push("No bookmarks available. If needed, find sections by searching the page texts.".into());
         } else {
             for (lvl, title, page) in self.toc.iter().take(2500) {
-                let mut wo = if *page >= 1 { format!("PDF-Seite {page}") } else { "ohne Seitenangabe".into() };
+                let mut wo = if *page >= 1 { format!("PDF page {page}") } else { "no page given".into() };
                 if *page >= 1 && self.label(*page) != page.to_string() {
-                    wo.push_str(&format!(", gedruckt {}", self.label(*page)));
+                    wo.push_str(&format!(", printed {}", self.label(*page)));
                 }
                 lines.push(format!("{}- {} → {}", "  ".repeat((*lvl).max(1) as usize - 1), title, wo));
             }
@@ -233,7 +238,7 @@ impl PageCache {
 
     fn label_ranges(&self) -> Vec<String> {
         if (1..=self.n).all(|p| self.label(p) == p.to_string()) {
-            return vec!["Gedruckte Seitenzahlen entsprechen den PDF-Seitenzahlen.".into()];
+            return vec!["Printed page numbers match the PDF page numbers.".into()];
         }
         let num = |p: u32| self.label(p).parse::<i64>().ok();
         let mut out = vec![];
@@ -247,19 +252,19 @@ impl PageCache {
                         q += 1;
                     }
                     if q > p {
-                        out.push(format!("- PDF-Seiten {p}–{q} = gedruckte Seiten {}–{}", self.label(p), self.label(q)));
+                        out.push(format!("- PDF pages {p}–{q} = printed pages {}–{}", self.label(p), self.label(q)));
                     } else {
-                        out.push(format!("- PDF-Seite {p} = gedruckt {}", self.label(p)));
+                        out.push(format!("- PDF page {p} = printed {}", self.label(p)));
                     }
                     p = q + 1;
                 }
                 None => {
-                    out.push(format!("- PDF-Seite {p} = gedruckt {}", self.label(p)));
+                    out.push(format!("- PDF page {p} = printed {}", self.label(p)));
                     p += 1;
                 }
             }
             if out.len() > 300 {
-                out.push("- … (weitere Zuordnungen ausgelassen)".into());
+                out.push("- … (further mappings omitted)".into());
                 break;
             }
         }

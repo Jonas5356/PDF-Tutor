@@ -4,6 +4,8 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.mjs";
 
+const tr = window.I18N.t;
+
 const $ = (id) => document.getElementById(id);
 const api = (path, body) => window.PT.api(path, body);
 const grid = $("grid");
@@ -42,7 +44,7 @@ async function pickAndAdd() {
     snapshot();
     await addDocs(r.docs);
   } catch (e) {
-    showToast("Konnte das PDF nicht laden: " + e.message);
+    showToast(tr("Could not load the PDF: {msg}", { msg: e.message }));
   }
 }
 
@@ -68,9 +70,9 @@ function render() {
     el.dataset.key = t.key;
     el.style.setProperty("--dc", d.color);
     el.innerHTML = `<span class="num">${i + 1}</span>
-      <div class="tools"><button class="rot" title="Drehen">↻</button><button class="del" title="Entfernen">×</button></div>
+      <div class="tools"><button class="rot" title="${escapeHtml(tr("Rotate"))}">↻</button><button class="del" title="${escapeHtml(tr("Remove"))}">×</button></div>
       <div class="box"><div class="ph"></div></div>
-      <div class="lab">${multi ? `<b>${escapeHtml(shortName(d.name))}</b> · ` : ""}S. ${t.page + 1}${t.rotate ? ` · ${t.rotate}°` : ""}</div>`;
+      <div class="lab">${multi ? `<b>${escapeHtml(shortName(d.name))}</b> · ` : ""}${escapeHtml(tr("p. {n}", { n: t.page + 1 }))}${t.rotate ? ` · ${t.rotate}°` : ""}</div>`;
     el.querySelector(".rot").addEventListener("mousedown", (e) => e.stopPropagation());
     el.querySelector(".del").addEventListener("mousedown", (e) => e.stopPropagation());
     el.querySelector(".rot").addEventListener("click", (e) => { e.stopPropagation(); rotate([t.key], 90); });
@@ -123,7 +125,9 @@ async function drawThumb(el) {
 function updateBar() {
   const n = S.tiles.length;
   const docs = new Set(S.tiles.map((t) => t.doc)).size;
-  $("ogInfo").textContent = n ? `${n} ${n === 1 ? "Seite" : "Seiten"}${docs > 1 ? ` aus ${docs} Dokumenten` : ""}${S.sel.size ? ` · ${S.sel.size} ausgewählt` : ""}` : "";
+  $("ogInfo").textContent = n
+    ? (n === 1 ? tr("1 page") : tr("{n} pages", { n })) + (docs > 1 ? " " + tr("from {n} documents", { n: docs }) : "") + (S.sel.size ? " · " + tr("{n} selected", { n: S.sel.size }) : "")
+    : "";
   const has = S.sel.size > 0;
   for (const id of ["rotLeftBtn", "rotRightBtn", "delBtn"]) $(id).disabled = !has;
   $("undoBtn").disabled = !S.history.length;
@@ -160,7 +164,7 @@ function removeTiles(keys) {
   S.tiles = S.tiles.filter((t) => !keys.includes(t.key));
   keys.forEach((k) => S.sel.delete(k));
   render();
-  showToast(`${keys.length} ${keys.length === 1 ? "Seite" : "Seiten"} entfernt.`, "Rückgängig", undo);
+  showToast(keys.length === 1 ? tr("1 page removed.") : tr("{n} pages removed.", { n: keys.length }), tr("Undo"), undo);
 }
 
 // ausgewählte Kacheln an Position `index` (Index vor dem Verschieben) verschieben
@@ -278,12 +282,12 @@ async function save() {
   const used = [...new Set(S.tiles.map((t) => t.doc))];
   const sources = used.map((i) => S.docs[i].id);
   const pages = S.tiles.map((t) => ({ src: used.indexOf(t.doc), page: t.page, rotate: t.rotate }));
-  const base = used.length === 1 ? `${S.docs[used[0]].name.replace(/\.pdf$/i, "")} (bearbeitet).pdf` : "Zusammengefügt.pdf";
+  const base = used.length === 1 ? tr("{name} (edited).pdf", { name: S.docs[used[0]].name.replace(/\.pdf$/i, "") }) : tr("Merged.pdf");
   $("saveBtn").disabled = true;
   try {
     const r = await api("/api/organize/save", { sources, pages, name: base });
     if (r.cancelled) return;
-    showToast(`Gespeichert: ${r.path} (${r.pages} Seiten)`, "Im Reader öffnen", () => api("/api/window/open", { url: `reader.html?id=${r.id}` }));
+    showToast(tr("Saved: {path} ({n} pages)", { path: r.path, n: r.pages }), tr("Open in reader"), () => api("/api/window/open", { url: `reader.html?id=${r.id}` }));
   } catch (e) {
     showToast(e.message);
   } finally {
@@ -326,18 +330,19 @@ document.addEventListener("keydown", (e) => {
 });
 
 async function init() {
-  window.PT.setTitle("Seiten organisieren – PDF-Tutor");
+  await window.I18N.init();
+  window.PT.setTitle(tr("Organize pages – PDF-Tutor"));
   const id = new URLSearchParams(location.search).get("id");
   if (id) {
     const info = await api(`/api/doc/${id}/info`);
-    window.PT.setTitle(`Seiten organisieren: ${info.title} – PDF-Tutor`);
+    window.PT.setTitle(tr("Organize pages: {title} – PDF-Tutor", { title: info.title }));
     await addDocs([{ id, name: info.file }]);
   } else {
     render();
   }
 }
 
-init().catch((e) => showToast("Fehler beim Laden: " + e.message));
+init().catch((e) => showToast(tr("Error while loading: {msg}", { msg: e.message })));
 
 // für automatische Tests (ohne Dateidialog)
 window.__organizer = { S, add: async (paths) => addDocs((await api("/api/organize/add", { paths })).docs) };

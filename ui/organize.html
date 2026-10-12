@@ -1,33 +1,34 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Seiten organisieren – PDF-Tutor</title>
+<title>Organize pages – PDF-Tutor</title>
 <link rel="icon" href="icon.png">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="organize.css">
 <script src="bridge.js"></script>
+<script src="i18n.js"></script>
 </head>
 <body>
 <header class="og-bar">
-  <div class="og-title">Seiten organisieren <span id="ogInfo" class="og-info"></span></div>
+  <div class="og-title"><span data-i18n>Organize pages</span> <span id="ogInfo" class="og-info"></span></div>
   <div class="og-actions">
-    <button id="addBtn" class="btn">PDF hinzufügen …</button>
+    <button id="addBtn" class="btn" data-i18n>Add PDF …</button>
     <span class="sep"></span>
-    <button id="rotLeftBtn" class="btn icon" title="Auswahl nach links drehen" disabled>↺</button>
-    <button id="rotRightBtn" class="btn icon" title="Auswahl nach rechts drehen (R)" disabled>↻</button>
-    <button id="delBtn" class="btn" title="Auswahl entfernen (Entf)" disabled>Entfernen</button>
-    <button id="undoBtn" class="btn icon" title="Rückgängig (Strg+Z)" disabled>↶</button>
+    <button id="rotLeftBtn" class="btn icon" title="Rotate selection left" data-i18n-title disabled>↺</button>
+    <button id="rotRightBtn" class="btn icon" title="Rotate selection right (R)" data-i18n-title disabled>↻</button>
+    <button id="delBtn" class="btn" title="Remove selection (Del)" data-i18n-title disabled data-i18n>Remove</button>
+    <button id="undoBtn" class="btn icon" title="Undo (Ctrl+Z)" data-i18n-title disabled>↶</button>
     <span class="sep"></span>
-    <button id="saveBtn" class="btn primary" disabled>Als neue Datei speichern …</button>
+    <button id="saveBtn" class="btn primary" disabled data-i18n>Save as new file …</button>
   </div>
 </header>
-<div id="hint" class="og-hint">Seiten ziehen zum Umsortieren · Klick wählt aus, mit Strg oder Umschalt mehrere · Das Original bleibt unverändert.</div>
+<div id="hint" class="og-hint" data-i18n>Drag pages to reorder · Click selects, with Ctrl or Shift several · The original remains unchanged.</div>
 <main id="grid" class="og-grid">
   <div id="empty" class="og-empty" hidden>
-    <p>Noch keine Seiten. Füge ein oder mehrere PDFs hinzu, um sie zusammenzufügen oder Seiten umzusortieren.</p>
-    <button id="addBtn2" class="btn primary">PDF hinzufügen …</button>
+    <p data-i18n>No pages yet. Add one or more PDFs to merge them or reorder pages.</p>
+    <button id="addBtn2" class="btn primary" data-i18n>Add PDF …</button>
   </div>
 </main>
 <div id="marker" class="og-marker" hidden></div>

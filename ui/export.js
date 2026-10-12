@@ -1,15 +1,17 @@
 // Lernzettel: alle Notizen eines Dokuments aufbereitet, zum Drucken oder Speichern.
 import { esc, renderMD } from "./render.js";
 
+const tr = window.I18N.t;
+
 const $ = (id) => document.getElementById(id);
 const DOC_ID = new URLSearchParams(location.search).get("id") || "";
 const api = (path, body) => window.PT.api(path, body);
 
 const COLORS = [
-  { name: "Gelb", hl: [1, 0.85, 0], line: [0.9, 0.68, 0], md: "🟨" },
-  { name: "Grün", hl: [0.49, 0.85, 0.39], line: [0.18, 0.62, 0.22], md: "🟩" },
-  { name: "Blau", hl: [0.45, 0.75, 1], line: [0.15, 0.45, 0.9], md: "🟦" },
-  { name: "Rosa", hl: [1, 0.56, 0.75], line: [0.88, 0.2, 0.5], md: "🟪" },
+  { name: "Yellow", hl: [1, 0.85, 0], line: [0.9, 0.68, 0], md: "🟨" },
+  { name: "Green", hl: [0.49, 0.85, 0.39], line: [0.18, 0.62, 0.22], md: "🟩" },
+  { name: "Blue", hl: [0.45, 0.75, 1], line: [0.15, 0.45, 0.9], md: "🟦" },
+  { name: "Pink", hl: [1, 0.56, 0.75], line: [0.88, 0.2, 0.5], md: "🟪" },
   { name: "Orange", hl: [1, 0.65, 0.25], line: [0.95, 0.45, 0.05], md: "🟧" },
 ];
 const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
@@ -29,7 +31,7 @@ const S = { info: null, notes: [], colors: new Set(), entries: [] };
 
 function pageLabel(n) {
   const l = S.info?.labels?.[n - 1];
-  return l && l !== String(n) ? `${n} (gedruckt: ${l})` : String(n);
+  return l && l !== String(n) ? tr("{n} (printed: {label})", { n, label: l }) : String(n);
 }
 
 // Notiz in Einträge zerlegen: Kommentare und Frage/Antwort-Paare in Thread-Reihenfolge
@@ -66,28 +68,29 @@ function selected() {
 
 function buildSheet() {
   const items = selected();
-  const title = S.info?.title || "Dokument";
-  const date = new Date().toLocaleDateString("de-AT", { day: "numeric", month: "long", year: "numeric" });
-  let html = `<h1>${esc(title)}</h1><div class="sub">Lernzettel · ${esc(S.info?.file || "")} · Stand ${esc(date)} · ${items.length} ${items.length === 1 ? "Eintrag" : "Einträge"}</div>`;
-  if (!items.length) html += `<p class="empty">Keine Notizen für diese Auswahl.</p>`;
+  const title = S.info?.title || tr("Document");
+  const date = new Date().toLocaleDateString(window.I18N.locale(), { day: "numeric", month: "long", year: "numeric" });
+  const count = items.length === 1 ? tr("1 entry") : tr("{n} entries", { n: items.length });
+  let html = `<h1>${esc(title)}</h1><div class="sub">${esc(tr("Study sheet"))} · ${esc(S.info?.file || "")} · ${esc(tr("As of {date}", { date }))} · ${esc(count)}</div>`;
+  if (!items.length) html += `<p class="empty">${esc(tr("No notes for this selection."))}</p>`;
   let page = 0;
   for (const { n, ents, isSticky } of items) {
     if (n.page !== page) {
       if (page) html += `</section>`;
       page = n.page;
-      html += `<section><h2>Seite ${esc(pageLabel(n.page))}</h2>`;
+      html += `<section><h2>${esc(tr("Page {n}", { n: pageLabel(n.page) }))}</h2>`;
     }
     const col = css(n.color || COLORS[0].hl);
     html += `<div class="item" style="--c:${col}">`;
     if (isSticky) {
-      html += `<div class="sticky"><span class="lab">Notiz</span>`;
+      html += `<div class="sticky"><span class="lab">${esc(tr("Note"))}</span>`;
       for (const e of ents) html += e.type === "qa" ? qaHtml(e) : `<div>${renderMD(e.text || e.a)}</div>`;
       html += `</div></div>`;
       continue;
     }
     if (n.text) html += `<blockquote class="quote ${esc(n.subtype)}"><span>${esc(n.text)}</span></blockquote>`;
     for (const e of ents) {
-      if (e.type === "comment") html += `<div class="comment"><span class="lab">Kommentar</span>${renderMD(e.text)}</div>`;
+      if (e.type === "comment") html += `<div class="comment"><span class="lab">${esc(tr("Comment"))}</span>${renderMD(e.text)}</div>`;
       else html += qaHtml(e);
     }
     html += `</div>`;
@@ -98,26 +101,26 @@ function buildSheet() {
 }
 
 function qaHtml(e) {
-  return `<div class="qa">${e.q ? `<span class="lab">Frage</span><div class="q">${renderMD(e.q)}</div>` : ""}<span class="lab">Antwort von Claude</span><div class="a">${renderMD(e.a)}</div></div>`;
+  return `<div class="qa">${e.q ? `<span class="lab">${esc(tr("Question"))}</span><div class="q">${renderMD(e.q)}</div>` : ""}<span class="lab">${esc(tr("Answer from Claude"))}</span><div class="a">${renderMD(e.a)}</div></div>`;
 }
 
 // --- Markdown ------------------------------------------------------------------
 
 function buildMarkdown() {
   const items = selected();
-  const title = S.info?.title || "Dokument";
-  const date = new Date().toLocaleDateString("de-AT", { day: "numeric", month: "long", year: "numeric" });
-  const out = [`# ${title}`, "", `*Lernzettel · ${S.info?.file || ""} · Stand ${date}*`, ""];
+  const title = S.info?.title || tr("Document");
+  const date = new Date().toLocaleDateString(window.I18N.locale(), { day: "numeric", month: "long", year: "numeric" });
+  const out = [`# ${title}`, "", `*${tr("Study sheet")} · ${S.info?.file || ""} · ${tr("As of {date}", { date })}*`, ""];
   const quoteLines = (t) => t.split(/\n/).map((l) => `> ${l}`).join("\n");
   let page = 0;
   for (const { n, ents, isSticky } of items) {
     if (n.page !== page) {
       page = n.page;
-      out.push(`## Seite ${pageLabel(n.page)}`, "");
+      out.push(`## ${tr("Page {n}", { n: pageLabel(n.page) })}`, "");
     }
     const mark = COLORS[colorIndex(n.color)].md;
     if (isSticky) {
-      out.push(`${mark} **Notiz:** ${ents.map((e) => e.text || e.a).join("\n\n")}`, "");
+      out.push(`${mark} **${tr("Note")}:** ${ents.map((e) => e.text || e.a).join("\n\n")}`, "");
       continue;
     }
     if (n.text) {
@@ -125,10 +128,10 @@ function buildMarkdown() {
       out.push(quoteLines(`${mark} ${t}`), "");
     }
     for (const e of ents) {
-      if (e.type === "comment") out.push(`**Kommentar:** ${e.text}`, "");
+      if (e.type === "comment") out.push(`**${tr("Comment")}:** ${e.text}`, "");
       else {
-        if (e.q) out.push(`**Frage:** ${e.q}`, "");
-        out.push(`**Antwort von Claude:**`, "", e.a, "");
+        if (e.q) out.push(`**${tr("Question")}:** ${e.q}`, "");
+        out.push(`**${tr("Answer from Claude")}:**`, "", e.a, "");
       }
     }
     out.push("---", "");
@@ -158,9 +161,9 @@ async function buildHtmlFile() {
   const serif = await dataUrl("vendor/fonts/source-serif-4-latin-opsz-normal.woff2", "font/woff2");
   const serifIt = await dataUrl("vendor/fonts/source-serif-4-latin-opsz-italic.woff2", "font/woff2");
   const sheetCss = await (await fetch("sheet.css")).text();
-  const title = `${S.info?.title || "Dokument"} – Lernzettel`;
+  const title = `${S.info?.title || tr("Document")} – ${tr("Study sheet")}`;
   return `<!doctype html>
-<html lang="de">
+<html lang="${window.I18N.lang()}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -200,18 +203,18 @@ function showToast(text, action, fn) {
   toastTimer = setTimeout(() => (t.hidden = true), action ? 8000 : 4000);
 }
 
-const safeName = (s) => String(s || "Lernzettel").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 120);
+const safeName = (s) => String(s || tr("Study sheet")).replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 120);
 
 async function save(kind) {
   const btn = $(kind === "html" ? "htmlBtn" : "mdBtn");
   btn.disabled = true;
   try {
     const content = kind === "html" ? await buildHtmlFile() : buildMarkdown();
-    const r = await api("/api/save-file", { docId: DOC_ID, kind, name: `${safeName(S.info?.title)} – Lernzettel.${kind}`, content });
+    const r = await api("/api/save-file", { docId: DOC_ID, kind, name: `${safeName(S.info?.title)} – ${tr("Study sheet")}.${kind}`, content });
     if (r.cancelled) return;
-    showToast(`Gespeichert: ${r.path}`, "Öffnen", () => api("/api/open-path", { what: "file", path: r.path }).catch((e) => showToast(e.message)));
+    showToast(tr("Saved: {path}", { path: r.path }), tr("Open"), () => api("/api/open-path", { what: "file", path: r.path }).catch((e) => showToast(e.message)));
   } catch (e) {
-    showToast("Speichern fehlgeschlagen: " + e.message);
+    showToast(tr("Saving failed: {msg}", { msg: e.message }));
   } finally {
     btn.disabled = false;
   }
@@ -225,7 +228,7 @@ for (const id of ["optPlain", "optComments", "optClaude", "optSticky"]) $(id).ad
 COLORS.forEach((c, i) => {
   const b = document.createElement("button");
   b.className = "sw";
-  b.title = `Nur ${c.name}`;
+  b.title = tr("Only {color}", { color: tr(c.name) });
   b.style.background = css(c.hl);
   b.addEventListener("click", () => {
     S.colors.has(i) ? S.colors.delete(i) : S.colors.add(i);
@@ -236,8 +239,10 @@ COLORS.forEach((c, i) => {
 });
 
 async function init() {
+  await window.I18N.init();
+  document.querySelectorAll("#optColors .sw").forEach((b, i) => (b.title = tr("Only {color}", { color: tr(COLORS[i].name) })));
   S.info = await api(`/api/doc/${DOC_ID}/info`);
-  window.PT.setTitle(`Lernzettel: ${S.info.title} – PDF-Tutor`);
+  window.PT.setTitle(tr("Study sheet: {title} – PDF-Tutor", { title: S.info.title }));
   const d = await api(`/api/doc/${DOC_ID}/notes`);
   S.notes = (d.notes || []).slice().sort((a, b) => a.page - b.page || pdfTop(b) - pdfTop(a));
   buildSheet();
@@ -248,6 +253,6 @@ const pdfTop = (n) => Math.max(...(n.pdfRects || [[0, 0, 0, 0]]).map((r) => r[3]
 
 init().catch((e) => {
   const b = $("banner");
-  b.textContent = "Fehler beim Laden: " + e.message;
+  b.textContent = tr("Error while loading: {msg}", { msg: e.message });
   b.hidden = false;
 });

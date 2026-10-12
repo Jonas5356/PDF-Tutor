@@ -1,5 +1,6 @@
 //! Ein geöffnetes Dokument: Notizen (aus dem PDF), Fragen an Claude, Schreiben ins PDF.
 
+use crate::i18n::tx;
 use crate::annots::{self, Editor, Kind, Note, CLAUDE_AUTHOR};
 use crate::cache::PageCache;
 use crate::claude::{self, HistoryItem};
@@ -13,8 +14,20 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime};
 
-pub const LOCKED_MSG: &str =
-    "Das PDF ist gerade in einem anderen Programm geöffnet und kann nicht gespeichert werden. Bitte dort schließen.";
+pub fn locked_msg() -> String {
+    tx(
+        "The PDF is currently open in another program and cannot be saved. Please close it there.",
+        "Das PDF ist gerade in einem anderen Programm geöffnet und kann nicht gespeichert werden. Bitte dort schließen.",
+    )
+}
+
+fn saving_failed(e: impl std::fmt::Display) -> String {
+    tx(&format!("Saving failed: {e}"), &format!("Speichern fehlgeschlagen: {e}"))
+}
+
+fn cannot_read(e: impl std::fmt::Display) -> String {
+    tx(&format!("The PDF cannot be read: {e}"), &format!("PDF kann nicht gelesen werden: {e}"))
+}
 
 /// Ein Schritt, der sich rückgängig machen lässt: Da jede Änderung ans Dateiende angehängt
 /// wird, genügt es, die Datei wieder auf die alte Länge zu kürzen.
@@ -67,12 +80,12 @@ fn file_sig(path: &Path) -> String {
     }
 }
 
-fn kind_label(k: Kind) -> &'static str {
+fn kind_label(k: Kind) -> String {
     match k {
-        Kind::Highlight => "Hervorhebung",
-        Kind::Underline => "Unterstreichung",
-        Kind::StrikeOut => "Durchstreichung",
-        Kind::Note => "Haftnotiz",
+        Kind::Highlight => tx("create highlight", "Hervorhebung anlegen"),
+        Kind::Underline => tx("create underline", "Unterstreichung anlegen"),
+        Kind::StrikeOut => tx("create strikeout", "Durchstreichung anlegen"),
+        Kind::Note => tx("create sticky note", "Haftnotiz anlegen"),
     }
 }
 
@@ -122,7 +135,7 @@ impl Doc {
                 return Ok(n.clone());
             }
         }
-        let bytes = std::fs::read(&self.path).map_err(|e| format!("PDF kann nicht gelesen werden: {e}"))?;
+        let bytes = std::fs::read(&self.path).map_err(cannot_read)?;
         let doc = annots::load(&bytes)?;
         let mut notes = annots::read_notes(&doc);
         // markierten Text für Markierungen aus anderen Programmen ermitteln
@@ -146,7 +159,7 @@ impl Doc {
     }
 
     fn find(&self, id: &str) -> Result<Note, String> {
-        self.notes()?.iter().find(|n| n.id == id).cloned().ok_or_else(|| "Notiz nicht gefunden".to_string())
+        self.notes()?.iter().find(|n| n.id == id).cloned().ok_or_else(|| tx("Note not found", "Notiz nicht gefunden"))
     }
 
     fn note_json(&self, ctx: &Ctx, n: &Note) -> Value {
@@ -232,14 +245,14 @@ impl Doc {
 
     fn modify_ex<R>(&self, ctx: &Ctx, label: Option<&str>, f: impl FnOnce(&mut Editor) -> Result<R, String>) -> Result<R, String> {
         let _g = self.write.lock().unwrap();
-        let bytes = std::fs::read(&self.path).map_err(|e| format!("PDF kann nicht gelesen werden: {e}"))?;
+        let bytes = std::fs::read(&self.path).map_err(cannot_read)?;
         self.backup_once(ctx, &bytes);
         let prev_len = bytes.len();
         let mut ed = Editor::open(bytes)?;
         let r = f(&mut ed)?;
         let out = ed.finish()?;
         if let Err(e) = write_atomic(&self.path, &out) {
-            return Err(if is_locked_error(&e) { LOCKED_MSG.into() } else { format!("Speichern fehlgeschlagen: {e}") });
+            return Err(if is_locked_error(&e) { locked_msg() } else { saving_failed(e) });
         }
         {
             let mut undo = self.undo.lock().unwrap();
@@ -267,17 +280,17 @@ impl Doc {
     pub fn undo(&self, ctx: &Ctx) -> Result<Value, String> {
         let _g = self.write.lock().unwrap();
         let Some(step) = self.undo.lock().unwrap().pop() else {
-            return Err("Es gibt nichts rückgängig zu machen.".into());
+            return Err(tx("There is nothing to undo.", "Es gibt nichts rückgängig zu machen."));
         };
-        let bytes = std::fs::read(&self.path).map_err(|e| format!("PDF kann nicht gelesen werden: {e}"))?;
+        let bytes = std::fs::read(&self.path).map_err(cannot_read)?;
         if bytes.len() != step.new_len || tail_sig(&bytes) != step.tail || step.prev_len > bytes.len() {
             self.undo.lock().unwrap().clear();
-            return Err("Rückgängig ist nicht mehr möglich, weil das PDF inzwischen anderweitig verändert wurde.".into());
+            return Err(tx("Undo is no longer possible because the PDF has been changed elsewhere in the meantime.", "Rückgängig ist nicht mehr möglich, weil das PDF inzwischen anderweitig verändert wurde."));
         }
         // Der alte Stand muss sich wieder lesen lassen
         annots::load(&bytes[..step.prev_len])?;
         if let Err(e) = write_atomic(&self.path, &bytes[..step.prev_len]) {
-            let msg = if is_locked_error(&e) { LOCKED_MSG.to_string() } else { format!("Speichern fehlgeschlagen: {e}") };
+            let msg = if is_locked_error(&e) { locked_msg() } else { saving_failed(e) };
             self.undo.lock().unwrap().push(step);
             return Err(msg);
         }
@@ -323,7 +336,7 @@ impl Doc {
         let contents = if question.trim().is_empty() { comment.trim() } else { question.trim() };
         let write = |ed: &mut Editor| ed.add_markup(page, kind, &rects, color, contents, &author, &nm, &meta);
         if question.trim().is_empty() {
-            self.modify_undoable(ctx, &format!("{} anlegen", kind_label(kind)), write)?;
+            self.modify_undoable(ctx, &kind_label(kind), write)?;
         } else {
             self.modify(ctx, write)?;
         }
@@ -336,7 +349,7 @@ impl Doc {
         let nm = format!("pdftutor-{}", new_id());
         let author = ctx.settings.read().unwrap().author();
         let meta = json!({"App": "PDF-Tutor"});
-        self.modify_undoable(ctx, "Haftnotiz anlegen", |ed| ed.add_sticky(page, at, color, text.trim(), &author, &nm, &meta))?;
+        self.modify_undoable(ctx, &tx("create sticky note", "Haftnotiz anlegen"), |ed| ed.add_sticky(page, at, color, text.trim(), &author, &nm, &meta))?;
         let n = self.find(&nm)?;
         Ok(self.note_json(ctx, &n))
     }
@@ -344,8 +357,8 @@ impl Doc {
     /// Art und/oder Farbe ändern.
     pub fn restyle(&self, ctx: &Ctx, id: &str, kind: Option<Kind>, color: Option<[f32; 3]>) -> Result<Value, String> {
         let n = self.find(id)?;
-        let label = if kind.is_some() && kind != Kind::from_name(&n.subtype) { "Art ändern" } else { "Farbe ändern" };
-        self.modify_undoable(ctx, label, |ed| ed.restyle(&n, kind, color))?;
+        let label = if kind.is_some() && kind != Kind::from_name(&n.subtype) { tx("change kind", "Art ändern") } else { tx("change color", "Farbe ändern") };
+        self.modify_undoable(ctx, &label, |ed| ed.restyle(&n, kind, color))?;
         let n = self.find(id)?;
         Ok(self.note_json(ctx, &n))
     }
@@ -353,12 +366,12 @@ impl Doc {
     /// Eigenen Kommentar ohne Claude an eine Notiz anhängen.
     pub fn comment(&self, ctx: &Ctx, id: &str, text: &str) -> Result<Value, String> {
         if text.trim().is_empty() {
-            return Err("Leerer Kommentar.".into());
+            return Err(tx("Empty comment.", "Leerer Kommentar."));
         }
         let n = self.find(id)?;
         let author = ctx.settings.read().unwrap().author();
         let nm = format!("pdftutor-{}", new_id());
-        self.modify_undoable(ctx, "Kommentar hinzufügen", |ed| {
+        self.modify_undoable(ctx, &tx("add comment", "Kommentar hinzufügen"), |ed| {
             if n.thread.is_empty() {
                 // erster Text einer Notiz: direkt in die Markierung bzw. Haftnotiz
                 ed.set_contents(n.obj, text.trim())
@@ -373,15 +386,15 @@ impl Doc {
     /// Text einer Nachricht (Kommentar oder Frage) ändern; leerer Text löscht die Nachricht.
     pub fn edit_message(&self, ctx: &Ctx, note_id: &str, msg_id: &str, text: &str) -> Result<Value, String> {
         let n = self.find(note_id)?;
-        let msg = n.thread.iter().find(|m| m.id == msg_id).ok_or_else(|| "Nachricht nicht gefunden".to_string())?;
+        let msg = n.thread.iter().find(|m| m.id == msg_id).ok_or_else(|| tx("Message not found", "Nachricht nicht gefunden"))?;
         if msg.role != "user" {
-            return Err("Antworten von Claude lassen sich nicht bearbeiten.".into());
+            return Err(tx("Answers from Claude cannot be edited.", "Antworten von Claude lassen sich nicht bearbeiten."));
         }
         let text = text.trim().to_string();
-        let label = if text.is_empty() { "Kommentar löschen" } else { "Kommentar bearbeiten" };
+        let label = if text.is_empty() { tx("delete comment", "Kommentar löschen") } else { tx("edit comment", "Kommentar bearbeiten") };
         let is_root = msg_id == n.id;
-        self.modify_undoable(ctx, label, |ed| {
-            let (obj, page) = annots::find_annot(ed.doc(), msg_id).ok_or_else(|| "Nachricht nicht gefunden".to_string())?;
+        self.modify_undoable(ctx, &label, |ed| {
+            let (obj, page) = annots::find_annot(ed.doc(), msg_id).ok_or_else(|| tx("Message not found", "Nachricht nicht gefunden"))?;
             if text.is_empty() && !is_root {
                 ed.remove_annot(page, obj)
             } else {
@@ -394,8 +407,8 @@ impl Doc {
 
     pub fn delete_note(&self, ctx: &Ctx, id: &str) -> Result<(), String> {
         let n = self.find(id)?;
-        let label = if n.subtype == "Text" { "Haftnotiz löschen" } else { "Markierung löschen" };
-        self.modify_undoable(ctx, label, |ed| ed.delete_note(&n))?;
+        let label = if n.subtype == "Text" { tx("delete sticky note", "Haftnotiz löschen") } else { tx("delete highlight", "Markierung löschen") };
+        self.modify_undoable(ctx, &label, |ed| ed.delete_note(&n))?;
         self.extra.lock().unwrap().remove(id);
         self.unsaved.lock().unwrap().retain(|u| u.note_id != id);
         for img in std::fs::read_dir(&ctx.paths.marks).into_iter().flatten().flatten() {
@@ -439,7 +452,7 @@ impl Doc {
             claude::DEFAULT_MODEL.to_string()
         };
         if !self.cache.wait_text(300) {
-            return Err("Das Dokument wird noch vorbereitet. Bitte gleich nochmal versuchen.".into());
+            return Err(tx("The document is still being prepared. Please try again in a moment.", "Das Dokument wird noch vorbereitet. Bitte gleich nochmal versuchen."));
         }
         let mode = self.effective_mode(ctx);
 
@@ -451,7 +464,7 @@ impl Doc {
         } else if !saved {
             let q = question.clone().unwrap_or_default();
             if q.trim().is_empty() {
-                return Err("Leere Frage.".into());
+                return Err(tx("Empty question.", "Leere Frage."));
             }
             let n = self.find(id)?;
             let author = ctx.settings.read().unwrap().author();
@@ -460,7 +473,7 @@ impl Doc {
         }
         let note = self.find(id)?;
         let last_user = note.thread.iter().rposition(|m| m.role == "user");
-        let Some(qi) = last_user else { return Err("Keine Frage vorhanden.".into()) };
+        let Some(qi) = last_user else { return Err(tx("There is no question.", "Keine Frage vorhanden.")) };
         let q = note.thread[qi].text.clone();
         let history: Vec<HistoryItem> =
             note.thread[..qi].iter().map(|m| HistoryItem { role: m.role.clone(), text: m.text.clone() }).collect();
@@ -538,7 +551,7 @@ impl Doc {
             let mut failed = vec![];
             for u in items {
                 if let Err(e) = me.save_answer(&ctx, &u.note_id, &u.text, &u.meta, u.session.clone()) {
-                    if e != LOCKED_MSG && !e.starts_with("Speichern") {
+                    if e != locked_msg() && !e.starts_with(&saving_failed("")) {
                         crate::logf!("Nachtragen aufgegeben: {e}");
                         continue;
                     }

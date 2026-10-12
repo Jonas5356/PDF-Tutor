@@ -80,7 +80,7 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
         }
     }
     let _ = std::fs::remove_file(&tmp);
-    Err(last.unwrap_or_else(|| std::io::Error::other("Datei konnte nicht ersetzt werden")))
+    Err(last.unwrap_or_else(|| std::io::Error::other("file could not be replaced")))
 }
 
 /// Ist die Datei gerade von einem anderen Programm gesperrt (z. B. Acrobat)?

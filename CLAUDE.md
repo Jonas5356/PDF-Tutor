@@ -1,39 +1,41 @@
-# PDF-Tutor – Hinweise für die Weiterentwicklung
+# PDF-Tutor – notes for development
 
-Tauri-2-Programm: Die Oberfläche ist HTML/JavaScript ohne Build-Schritt (`ui/`), der Hintergrund ist in Rust geschrieben (`src-tauri/src/`). Sprache der Oberfläche und der Kommentare im Code: Deutsch.
+Tauri 2 app: the interface is HTML/JavaScript without a build step (`ui/`), the backend is written in Rust (`src-tauri/src/`). The interface is available in English and German; code comments and log messages are in German.
 
-## Aufbau
+## Structure
 
-- `ui/index.html`, `home.js`, `home.css`: Startseite mit Bibliothek, Einstellungen und Updates
-- `ui/reader.html`, `app.js`, `style.css`: Reader (PDF.js für die Anzeige, Randspalte mit Notizen, Seitenleiste mit Inhalt/Seiten/Notizen, Suche mit Strg+F)
-- `ui/render.js`: Markdown mit Formeln (marked, KaTeX, DOMPurify), gemeinsam für Reader und Lernzettel
-- `ui/export.html`, `export.js`, `export.css`, `sheet.css`: Lernzettel-Fenster. `sheet.css` bestimmt das Aussehen auch beim Drucken und in der gespeicherten HTML-Datei (Schriften als data:-URLs eingebettet).
-- `ui/organize.html`, `organize.js`, `organize.css`: Seiten organisieren und zusammenfügen (Ziehen mit Mausereignissen, nicht HTML5-Drag&Drop, weil Tauri das unter Windows abfängt). Gespeichert wird über `pdfium_host::assemble` immer als neue Datei.
-- `ui/bridge.js`: Verbindung zum Rust-Teil. Ein einziger Befehl `api(path, body)`. Dazu kommt das eigene Protokoll `pdftutor://` (PDF-Daten unter `doc/<id>/pdf`, Vorschaubilder unter `thumb/<id>`).
-- `src-tauri/src/api.rs`: verteilt die `api`-Aufrufe (`/api/library…`, `/api/doc/<id>/…`, `/api/settings`, `/api/update/…`)
-- `annots.rs`: Lesen und Schreiben der PDF-Anmerkungen mit lopdf.
-  - Eine Notiz ist eine Wurzel-Anmerkung (Highlight/Underline/StrikeOut/Squiggly/Text/FreeText) mit Antworten (`/IRT`).
-  - Eigene Zusatzdaten stehen im Wörterbuch `/PDFTutor`: markierter Text, Claude-Sitzung, Modell, Rolle, Token-Verbrauch.
-  - Geschrieben wird **immer inkrementell** (`IncrementalDocument`). `Editor::finish` prüft, dass der bisherige Dateiinhalt unverändert vorne steht.
-  - Arten (`Kind`): Highlight, Underline, StrikeOut, Text (Haftnotiz). Jede bekommt ein eigenes Erscheinungsbild (/AP), damit sie in allen Programmen gleich aussieht. `corners()` legt die Leserichtung anhand der Seitendrehung fest.
-  - Kommentar ohne Antwort steht in /Contents der Wurzel, weitere Kommentare und die Claude-Antworten als Antworten (/IRT). In der Oberfläche gilt eine Nutzer-Nachricht als „Frage“, wenn Claude darauf geantwortet hat, sonst als „Kommentar“.
-- Rückgängig (Strg+Z): Da jede Änderung angehängt wird, kürzt `Doc::undo` die Datei auf die Länge vor dem Schritt (nur wenn sie seither unverändert ist). Schritte über `modify_undoable`; ein gewöhnliches `modify` (z. B. Claude-Antwort) leert den Stapel.
-- `doc.rs`: geöffnetes Dokument. Notizen kommen aus dem PDF. Dazu gehören der Ablauf einer Frage (`ask`), das Speichern (`modify`, atomar mit Wiederholung bei gesperrter Datei) und die Übernahme der `*.notes.json` aus Version 3.
-- `cache.rs`: Seiten-Cache für Claude (Text und JPEG je Seite, `uebersicht.md`, `volltext.md`) im Datenordner. Der Schlüssel ist der Pfad. Gültig, solange die ersten 1 MB der Datei gleich bleiben, denn angehängte Kommentare ändern daran nichts.
-- `claude.rs`: Aufruf von `claude -p` (Prompt über stdin, gleichbleibender Teil als `--append-system-prompt-file`, nur lesende Werkzeuge `Read,Grep,Glob`) und Prompt-Texte
-- `pdfium_host.rs`: PDFium (Seitenbilder, Text, Inhaltsverzeichnis). Alle Aufrufe laufen nacheinander über eine Sperre.
-- `library.rs`, `settings.rs`, `windows.rs`, `util.rs`: Bibliothek (`bibliothek.json`), Einstellungen, Fenster, Hilfsfunktionen
+- `ui/index.html`, `home.js`, `home.css`: start page with library, settings and updates
+- `ui/reader.html`, `app.js`, `style.css`: reader (PDF.js for display, margin column with notes, sidebar with contents/pages/notes, search with Ctrl+F)
+- `ui/i18n.js`: translations. The key is the English text, `DE` holds the German version; missing entries fall back to English. HTML marks texts with `data-i18n`, `data-i18n-html`, `data-i18n-title`, `data-i18n-placeholder`, `data-i18n-aria-label`; JavaScript uses `t()` (start page) or `tr()` (reader, study sheet, organizer — `t` is often a local variable there). Every page calls `await I18N.init()` before rendering.
+- `ui/render.js`: Markdown with formulas (marked, KaTeX, DOMPurify), shared by reader and study sheet
+- `ui/export.html`, `export.js`, `export.css`, `sheet.css`: study sheet window. `sheet.css` also defines the look when printing and in the saved HTML file (fonts embedded as data: URLs).
+- `ui/organize.html`, `organize.js`, `organize.css`: organize and merge pages (dragging uses mouse events, not HTML5 drag & drop, which Tauri intercepts on Windows). Saving always creates a new file via `pdfium_host::assemble`.
+- `ui/bridge.js`: connection to the Rust side. A single command `api(path, body)`, plus the custom protocol `pdftutor://` (PDF data under `doc/<id>/pdf`, thumbnails under `thumb/<id>`).
+- `src-tauri/src/api.rs`: dispatches the `api` calls (`/api/library…`, `/api/doc/<id>/…`, `/api/settings`, `/api/organize/…`, `/api/update/…`)
+- `i18n.rs`: language for messages from the Rust side, `tx(english, german)`. Language order: language chosen in the installer (written to `installer-language.txt` next to the exe, taken over once at start, not on automatic updates), then the saved setting, then the system language.
+- `annots.rs`: reading and writing PDF annotations with lopdf.
+  - A note is a root annotation (Highlight/Underline/StrikeOut/Squiggly/Text/FreeText) with replies (`/IRT`).
+  - Own extra data lives in the dictionary `/PDFTutor`: highlighted text, Claude session, model, role, token usage.
+  - Writing is **always incremental** (`IncrementalDocument`). `Editor::finish` checks that the previous file content is unchanged at the start.
+  - Kinds (`Kind`): Highlight, Underline, StrikeOut, Text (sticky note). Each gets its own appearance stream (/AP) so it looks the same in every program. `corners()` determines the reading direction from the page rotation.
+  - A comment without replies is the /Contents of the root; further comments and Claude's answers are replies (/IRT). In the interface a user message counts as a "question" if Claude answered it, otherwise as a "comment".
+- Undo (Ctrl+Z): since every change is appended, `Doc::undo` truncates the file to its length before the step (only if it is unchanged since). Steps go through `modify_undoable`; a plain `modify` (e.g. a Claude answer) clears the stack.
+- `doc.rs`: an open document. Notes come from the PDF. Also the flow of a question (`ask`), saving (`modify`, atomic with retry on a locked file) and the import of `*.notes.json` from version 3.
+- `cache.rs`: page cache for Claude (text and JPEG per page, `uebersicht.md`, `volltext.md`) in the data folder. The key is the path. Valid as long as the first 1 MB of the file stays the same, since appended comments don't change it.
+- `claude.rs`: calls `claude -p` (prompt via stdin, constant part as `--append-system-prompt-file`, read-only tools `Read,Grep,Glob`) and the prompt texts. Instructions to Claude are in English; Claude answers in the language of the question unless the question asks otherwise.
+- `pdfium_host.rs`: PDFium (page images, text, outline, merging pages). All calls are serialized through a lock.
+- `library.rs`, `settings.rs`, `windows.rs`, `util.rs`: library (`bibliothek.json`), settings, windows, helpers
 
-Datenordner: `%LOCALAPPDATA%\PDF-Tutor-Daten` (Windows) bzw. `~/.local/share/pdf-tutor`. Für Tests lässt er sich mit `PDFTUTOR_DATA` überschreiben.
+Data folder: `%LOCALAPPDATA%\PDF-Tutor-Daten` (Windows) or `~/.local/share/pdf-tutor`. For tests it can be overridden with `PDFTUTOR_DATA`.
 
-## Grundsätze
+## Principles
 
-- Das Original-PDF wird nur durch inkrementelle Updates verändert, nie neu geschrieben.
-- Claude liest nie das Original-PDF, nur den Seiten-Cache. Claude darf nichts ausführen oder schreiben.
-- Koordinaten: Die Oberfläche rechnet mit PDF.js (`convertToPdfPoint` / `convertToViewportRectangle`) zwischen Bildschirm- und PDF-Koordinaten um. An den Rust-Teil gehen PDF-Koordinaten `[links, unten, rechts, oben]`.
+- The original PDF is only changed through incremental updates, never rewritten.
+- Claude never reads the original PDF, only the page cache. Claude must not execute or write anything.
+- Coordinates: the interface converts between screen and PDF coordinates with PDF.js (`convertToPdfPoint` / `convertToViewportRectangle`). The Rust side receives PDF coordinates `[left, bottom, right, top]`.
 
-## Testen
+## Testing
 
-- `cargo test` in `src-tauri` (Schreiben in normale und verschlüsselte PDFs, fremde Anmerkungen, Löschen). Die Testdateien liegen in `PT_TESTDIR`.
-- Ende-zu-Ende-Tests laufen mit `tauri-driver` und WebKitWebDriver unter Linux/Xvfb. Mit `PDFTUTOR_TEST_SAVE_DIR` speichert das Programm ohne Dialog in diesen Ordner (nur für Tests).
-- Gegenprobe der Erscheinungsbilder mit einem zweiten Renderer (z. B. PyMuPDF), auch für gedrehte Seiten.
+- `cargo test` in `src-tauri` (writing into plain and encrypted PDFs, foreign annotations, deleting, rotated pages, merging). Test files are in `PT_TESTDIR`.
+- End-to-end tests run with `tauri-driver` and WebKitWebDriver on Linux/Xvfb. With `PDFTUTOR_TEST_SAVE_DIR` the app saves into that folder without a dialog, and `PDFTUTOR_LANG` (`en`/`de`) fixes the language (tests only).
+- Cross-check appearance streams with a second renderer (e.g. PyMuPDF), including rotated pages.

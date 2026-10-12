@@ -8,6 +8,7 @@ mod api;
 mod cache;
 mod claude;
 mod doc;
+mod i18n;
 mod library;
 mod pdfium_host;
 mod settings;
@@ -33,6 +34,12 @@ fn main() {
     util::init_log(paths.log.clone());
     logf!("PDF-Tutor {} startet, Daten in {}", api::VERSION, paths.data.display());
     let ctx = Arc::new(Ctx::new(paths));
+    {
+        let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf()));
+        let mut st = ctx.settings.write().unwrap();
+        settings::resolve_language(&mut st, &ctx.paths.settings, exe_dir.as_deref());
+        logf!("Sprache: {}", i18n::lang());
+    }
     let ctx_proto = ctx.clone();
     let ctx_single = ctx.clone();
     let ctx_setup = ctx.clone();
@@ -80,7 +87,8 @@ fn main() {
             }
             dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources"));
             pdfium_host::init(&dirs);
-            let tpl = dirs.iter().map(|d| d.join("hinweise.vorlage.txt")).find(|p| p.exists());
+            let tpl_name = if i18n::lang() == "de" { "hinweise.vorlage.txt" } else { "hints.template.txt" };
+            let tpl = dirs.iter().map(|d| d.join(tpl_name)).find(|p| p.exists());
             settings::ensure_hinweise(&ctx_setup.paths, tpl);
             let args: Vec<String> = std::env::args().collect();
             let url = match pdf_arg(&args) {

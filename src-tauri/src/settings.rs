@@ -94,6 +94,9 @@ pub struct Settings {
     /// Vor der ersten Änderung eines PDFs eine Kopie im Datenordner ablegen
     #[serde(default = "default_true")]
     pub sicherheitskopie: bool,
+    /// Sprache der Oberfläche: "en" oder "de" (fehlt: beim Start bestimmen)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sprache: Option<String>,
 }
 
 impl Settings {
@@ -116,7 +119,32 @@ impl Settings {
         if !self.autor.trim().is_empty() {
             return self.autor.trim().to_string();
         }
-        std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_else(|_| "Leser".into())
+        std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_else(|_| crate::i18n::tx("Reader", "Leser"))
+    }
+}
+
+/// Sprache festlegen: Auswahl im Installer (einmalig übernommen), sonst gespeicherte
+/// Einstellung, sonst Systemsprache.
+pub fn resolve_language(settings: &mut Settings, settings_path: &Path, exe_dir: Option<&Path>) {
+    let mut changed = false;
+    if let Some(f) = exe_dir.map(|d| d.join("installer-language.txt")) {
+        if let Some(l) = std::fs::read_to_string(&f).ok().and_then(|t| crate::i18n::normalize(&t)) {
+            crate::logf!("Sprache aus dem Installer: {l}");
+            settings.sprache = Some(l);
+            changed = true;
+        }
+        let _ = std::fs::remove_file(&f);
+    }
+    if let Some(l) = std::env::var("PDFTUTOR_LANG").ok().and_then(|l| crate::i18n::normalize(&l)) {
+        settings.sprache = Some(l);
+    }
+    if settings.sprache.as_deref().and_then(crate::i18n::normalize).is_none() {
+        settings.sprache = Some(crate::i18n::system_lang());
+        changed = true;
+    }
+    crate::i18n::set(settings.sprache.as_deref().unwrap_or("en"));
+    if changed {
+        let _ = settings.save(settings_path);
     }
 }
 

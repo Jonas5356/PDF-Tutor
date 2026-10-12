@@ -1,72 +1,70 @@
 # PDF-Tutor
 
-**Ein PDF-Reader zum Durcharbeiten von Fachliteratur: Stelle markieren, Frage stellen, die Antwort erscheint direkt daneben.**
+**A PDF reader for working through technical literature: highlight a passage, ask a question, and the answer appears right next to it.**
 
-Der PDF-Tutor ist für Lehrbücher, Skripten und Vorlesungsfolien gedacht. Du liest wie in jedem anderen Reader. Wenn dir eine Stelle unklar ist, markierst du sie und stellst eine Frage. Claude sieht dabei die markierte Stelle, die ganze Seite als Bild (Formeln und Abbildungen inklusive) und bei Bedarf den Rest des Dokuments. Die Antwort erscheint in einer Randspalte neben dem Text, mit sauber gesetzten Formeln. Nachfragen sind jederzeit möglich.
+PDF-Tutor is made for textbooks, lecture notes and lecture slides. You read as in any other PDF reader. When a passage is unclear, you highlight it and ask a question. Claude sees the highlighted passage, the whole page as an image (including formulas and figures) and, if needed, the rest of the document. The answer appears in a margin column next to the text, with properly typeset math. You can ask follow-up questions at any time.
 
-*English summary below.*
+The interface is available in English and German. *Deutsche Beschreibung weiter unten.*
 
-## Funktionen
+## Features
 
-- **Fragen zu markierten Stellen.** Claude bekommt die markierte Stelle, ein Bild der Seite und den Kontext des Dokuments. Du kannst auf andere Stellen verweisen, etwa mit „diese und die nächsten 5 Folien“, „Seite 87“, „Abschnitt 3.2“ oder „Wo wurde dieses Symbol eingeführt?“.
-- **Markieren und kommentieren wie in Acrobat.** Text in fünf Farben hervorheben, unterstreichen oder durchstreichen, eigene Kommentare dazuschreiben und Haftnotizen an beliebige Stellen setzen. Ein Klick auf eine Markierung ändert Farbe oder Art. Strg+Z macht den letzten Schritt rückgängig.
-- **Alles steht im PDF.** Markierungen, Fragen und Antworten werden als Standard-PDF-Kommentare gespeichert, als Markierung mit Antwort-Thread wie in Acrobat. Sie sind auch in Acrobat, Edge oder auf dem Tablet sichtbar, und Kommentare aus diesen Programmen erscheinen umgekehrt im PDF-Tutor. Gespeichert wird inkrementell: Der ursprüngliche Inhalt der Datei bleibt Byte für Byte erhalten.
-- **Seitenleiste und Suche.** Inhaltsverzeichnis, Seitenvorschau und eine Liste aller Notizen (filterbar nach Farbe und Art). Strg+F durchsucht das ganze Dokument, auch über Silbentrennungen am Zeilenende hinweg.
-- **Lernzettel.** Alle Markierungen, Kommentare und Claude-Antworten eines Dokuments übersichtlich nach Seiten, mit Formeln. Zum Drucken bzw. als PDF, als eigenständige HTML-Datei oder als Markdown (z. B. für Obsidian).
-- **Seiten organisieren.** PDFs zusammenfügen, Seiten umsortieren, drehen oder entfernen. Das Ergebnis wird als neue Datei gespeichert, die Originale bleiben unverändert; Kommentare wandern mit.
-- **Volltext- oder Suchmodus.** Kleinere Dokumente bekommt Claude komplett mit. In großen Büchern sucht Claude gezielt nach den relevanten Seiten.
-- **Bibliothek.** Unter „Weiterlesen“ findest du zuletzt geöffnete Dokumente samt Lesefortschritt. Zusätzlich lassen sich Ordner einbinden, zum Beispiel deine Vorlesungsunterlagen.
-- **Eigene Hinweise an Claude.** Du kannst einstellen, welches Vorwissen vorausgesetzt werden darf und wie ausführlich die Erklärungen sein sollen.
+- **Questions about highlighted passages.** Claude gets the highlighted passage, an image of the page and the context of the document. You can refer to other places, e.g. "this and the next 5 slides", "page 87", "section 3.2" or "where was this symbol introduced?". Claude answers in the language of your question.
+- **Highlight and comment like in Acrobat.** Highlight text in five colors, underline or strike out, write your own comments and place sticky notes anywhere. Clicking a highlight changes its color or kind. Ctrl+Z undoes the last step.
+- **Everything is stored in the PDF.** Highlights, comments, questions and answers are saved as standard PDF annotations (a highlight with a reply thread, as in Acrobat). They are visible in Acrobat, Edge or on a tablet, and comments made in those programs show up in PDF-Tutor. Saving is incremental: the original bytes of the file are never modified.
+- **Sidebar and search.** Table of contents, page thumbnails and a list of all notes (filterable by color and kind). Ctrl+F searches the whole document, even across words hyphenated at line ends.
+- **Study sheets.** All highlights, comments and Claude answers of a document, neatly arranged by page, with formulas. Print or save as PDF, save as a standalone HTML file or as Markdown (e.g. for Obsidian).
+- **Organize pages.** Merge PDFs, reorder, rotate or remove pages. The result is saved as a new file; the originals remain unchanged and comments come along.
+- **Full-text or search mode.** For smaller documents Claude receives the complete text. In large books Claude searches for the relevant pages.
+- **Library.** "Continue reading" lists recently opened documents with your reading progress. You can also add folders, e.g. the one with your lecture notes.
+- **Your own notes for Claude.** Tell Claude what prior knowledge it can assume and how detailed explanations should be.
 
-## Voraussetzungen
+## Requirements
 
-- Windows 10 oder 11
-- [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), installiert und mit deinem eigenen Claude-Konto (Pro oder Max) oder einem eigenen API-Schlüssel angemeldet. Zum Prüfen gibst du in der PowerShell `claude --version` ein.
+- Windows 10 or 11
+- [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), installed and signed in with your own Claude account (Pro or Max) or your own API key. To check, run `claude --version` in PowerShell.
 
-Der PDF-Tutor ruft das auf deinem Rechner installierte Claude Code auf. Er speichert oder verwendet keine Zugangsdaten. Fragen werden über dein eigenes Konto abgerechnet und zählen zu dessen Nutzungslimits.
+PDF-Tutor calls the Claude Code installed on your computer. It never stores or uses credentials. Questions are billed to your own account and count towards its usage limits.
 
 ## Installation
 
-Unter [Releases](../../releases) die Datei `PDF-Tutor_…_x64-setup.exe` herunterladen und ausführen. Administratorrechte sind nicht nötig.
+Download `PDF-Tutor_…_x64-setup.exe` from [Releases](../../releases) and run it. No administrator rights are needed. The installer asks for the language (English or German); PDF-Tutor uses the same language, and you can change it later in the settings.
 
-Windows zeigt eventuell die Meldung „Der Computer wurde durch Windows geschützt“, weil das Programm nicht signiert ist. Klicke dann auf „Weitere Informationen“ und anschließend auf „Trotzdem ausführen“.
+Windows may show "Windows protected your PC" because the program is not signed yet. Click "More info" and then "Run anyway".
 
-## Datenschutz
+## Privacy
 
-- Keine Telemetrie, keine eigenen Server.
-- Bei einer Frage schickt Claude Code die Frage, die markierte Stelle, Seitenbilder und Seitentexte des Dokuments an Anthropic. Dafür gelten die Bedingungen deines Claude-Kontos.
-- Seitenbilder und -texte für Claude, die Bibliothek und die Einstellungen liegen lokal unter `%LOCALAPPDATA%\PDF-Tutor-Daten`.
+- No telemetry, no servers of our own.
+- When you ask a question, Claude Code sends the question, the highlighted passage, page images and page texts of the document to Anthropic. The terms of your Claude account apply.
+- Page images and texts prepared for Claude, the library and the settings are stored locally in `%LOCALAPPDATA%\PDF-Tutor-Daten`.
 
-## Hinweise
+## Notes
 
-- KI-Antworten können falsch sein. Prüfe sie, bevor du dich auf sie verlässt.
-- Der PDF-Tutor ist ein unabhängiges Freizeitprojekt. Er steht in keiner Verbindung zu Anthropic und wird von Anthropic weder unterstützt noch geprüft.
+- AI answers can be wrong. Check them before you rely on them.
+- PDF-Tutor is an independent hobby project. It is not affiliated with, endorsed or reviewed by Anthropic.
 
-## Selbst bauen
+## Building from source
 
-Benötigt werden [Rust](https://rustup.rs) (unter Windows inklusive Visual-Studio-Buildtools) und [Node.js](https://nodejs.org).
+You need [Rust](https://rustup.rs) (on Windows including the Visual Studio Build Tools) and [Node.js](https://nodejs.org).
 
 ```
 npm ci
 npx tauri build
 ```
 
-Unter Windows erledigt `build_windows.bat` dasselbe per Doppelklick. Der Installer liegt danach in `src-tauri/target/release/bundle/nsis/`. GitHub Actions baut den Installer bei jedem Push automatisch. Ein Release entsteht über Actions → „Windows-Installer bauen“ → *Run workflow* mit Häkchen bei „Release-Entwurf anlegen“ (siehe `.github/workflows/build.yml`).
+On Windows, `build_windows.bat` does the same with a double click. The installer ends up in `src-tauri/target/release/bundle/nsis/`. GitHub Actions builds the installer on every push. A release is created via Actions → "Build Windows installer" → *Run workflow* with "Create release draft" ticked (see `.github/workflows/build.yml`).
 
-Aufbau des Codes: siehe [CLAUDE.md](CLAUDE.md).
+Code structure: see [CLAUDE.md](CLAUDE.md). Translations of the interface are in `ui/i18n.js`.
 
-## Lizenz
+## License
 
-Wahlweise unter der [MIT-Lizenz](LICENSE-MIT) oder der [Apache-Lizenz 2.0](LICENSE-APACHE). Die Lizenzen der enthaltenen Fremdkomponenten (PDF.js, PDFium, KaTeX u. a.) stehen in [THIRD_PARTY.md](THIRD_PARTY.md).
+Licensed under either the [MIT license](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at your option. Licenses of the bundled third-party components (PDF.js, PDFium, KaTeX and others) are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ---
 
-## English summary
+## Deutsch
 
-PDF-Tutor is a PDF reader for studying textbooks, lecture notes and slides. Select a passage, ask a question, and Claude's answer appears in a margin column next to the text, with properly typeset math. Claude sees the selected passage, an image of the page and, as needed, the rest of the document.
+Der PDF-Tutor ist ein PDF-Reader zum Durcharbeiten von Fachliteratur: Stelle markieren, Frage stellen, die Antwort von Claude erscheint direkt daneben, mit sauber gesetzten Formeln. Markierungen, Kommentare, Haftnotizen und Claude-Gespräche werden als normale PDF-Kommentare in der Datei gespeichert und sind auch in Acrobat oder Edge sichtbar. Dazu kommen eine Seitenleiste mit Inhaltsverzeichnis, Seitenvorschau und Notizliste, die Suche mit Strg+F, Lernzettel (Drucken/PDF, HTML, Markdown) und das Zusammenfügen und Umsortieren von PDFs.
 
-Highlight in five colors, underline, strike out, add your own comments and sticky notes. A sidebar shows the outline, page thumbnails and all notes; Ctrl+F searches the document. Notes can be exported as a study sheet (print/PDF, HTML, Markdown), and pages can be merged, reordered, rotated or removed into a new file. Highlights, comments, questions and answers are stored **inside the PDF** as standard annotations (a highlight with a reply thread). They show up in Acrobat, Edge and other readers. Saving is incremental: the original bytes of the file are never modified.
+Voraussetzung ist Windows 10 oder 11 und ein installiertes, angemeldetes [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) mit eigenem Claude-Konto. Den Installer gibt es unter [Releases](../../releases); er fragt nach der Sprache, die auch das Programm verwendet. Claude antwortet in der Sprache der Frage.
 
-Requirements: Windows 10/11 and [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), signed in with your own Claude subscription or API key. PDF-Tutor never handles credentials; usage is billed to your own account. The UI is currently German only.
-
-Not affiliated with or endorsed by Anthropic. Licensed under MIT or Apache-2.0, at your option.
+Der PDF-Tutor ist ein unabhängiges Freizeitprojekt und steht in keiner Verbindung zu Anthropic. KI-Antworten können falsch sein.

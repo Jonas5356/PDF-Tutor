@@ -1,6 +1,8 @@
 import * as pdfjsLib from "./vendor/pdf.min.mjs";
 import { esc, renderMD } from "./render.js";
 
+const tr = window.I18N.t;
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -63,11 +65,14 @@ function modelLabel(id) {
 // ---------------------------------------------------------------------------
 
 async function init() {
+  await window.I18N.init();
+  // Farbpunkte entstehen vor dem Laden der Sprache: Titel jetzt übersetzen
+  document.querySelectorAll("#selBar .sw, #markBar .sw").forEach((b) => (b.title = tr("Highlight in {color}", { color: tr(COLORS[+b.dataset.i].name) })));
   S.info = await api("/api/info");
   window.PT.setTitle(`${S.info.title} – PDF-Tutor`);
   $("bookTitle").textContent = S.info.title;
   if (!S.info.claudeFound) {
-    showBanner("Der Befehl „claude“ wurde nicht gefunden. Lesen geht, Fragen werden aber fehlschlagen.");
+    showBanner(tr("The “claude” command was not found. Reading works, but questions will fail."));
   }
 
   S.doc = S.info.doc;
@@ -333,7 +338,7 @@ function updateCurrentPage() {
   if (document.activeElement !== $("pageInput")) $("pageInput").value = n;
   markCurrentThumb(n);
   const l = pageLabel(n);
-  $("pageLabel").textContent = l !== String(n) ? `(gedruckt: ${l})` : "";
+  $("pageLabel").textContent = l !== String(n) ? tr("(printed: {label})", { label: l }) : "";
   saveState({ lastPage: n });
 }
 
@@ -368,26 +373,26 @@ $("modeSelect").onchange = async (e) => {
 };
 
 // Status des Dokuments (Vorbereitung, Umfang, Modus)
-const fmtNum = (n) => Number(n || 0).toLocaleString("de-AT");
-const modeName = (m) => ({ volltext: "Volltext", suche: "Suche" }[m] || m || "");
+const fmtNum = (n) => window.I18N.fmtNum(n);
+const modeName = (m) => ({ volltext: tr("full text"), suche: tr("search") }[m] || m || "");
 
 function updateDocStatus() {
   const d = S.doc;
   if (!d) return;
   const el = $("docStatus");
   if (!d.textReady) {
-    el.textContent = "Dokument wird vorbereitet …";
+    el.textContent = tr("Preparing document …");
   } else {
-    const tk = d.tokens >= 1000 ? `${fmtNum(Math.round(d.tokens / 1000))} Tsd.` : fmtNum(d.tokens);
-    let t = `${tk} Tokens → ${modeName(d.effectiveMode)}`;
-    if (d.imagesDone < d.pages) t += ` · Bilder ${Math.floor((100 * d.imagesDone) / d.pages)} %`;
-    el.textContent = t;
+    const tk = d.tokens >= 1000 ? tr("{n}k", { n: fmtNum(Math.round(d.tokens / 1000)) }) : fmtNum(d.tokens);
+    let txt = tr("{tokens} tokens → {mode}", { tokens: tk, mode: modeName(d.effectiveMode) });
+    if (d.imagesDone < d.pages) txt += " · " + tr("images {p} %", { p: Math.floor((100 * d.imagesDone) / d.pages) });
+    el.textContent = txt;
   }
   if (d.textReady && d.tokens != null) {
-    const autoMode = d.tokens <= d.limit ? "Volltext" : "Suche";
-    $("modeSelect").options[0].textContent = `Kontext: automatisch (${autoMode})`;
+    const autoMode = d.tokens <= d.limit ? tr("full text") : tr("search");
+    $("modeSelect").options[0].textContent = tr("Context: automatic ({mode})", { mode: autoMode });
   }
-  el.title = `Automatisch: Volltext bis ${fmtNum(d.limit)} Tokens, darüber Suche.` +
+  el.title = tr("Automatic: full text up to {n} tokens, search above that.", { n: fmtNum(d.limit) }) +
     (d.error ? `\n${d.error}` : "");
 }
 
@@ -418,13 +423,14 @@ function showBanner(text) {
 
 // Hervorhebungen in hellen Tönen, Linien (Unter-/Durchstreichen) kräftiger
 const COLORS = [
-  { name: "Gelb",   hl: [1, 0.85, 0],      line: [0.9, 0.68, 0] },
-  { name: "Grün",   hl: [0.49, 0.85, 0.39], line: [0.18, 0.62, 0.22] },
-  { name: "Blau",   hl: [0.45, 0.75, 1],    line: [0.15, 0.45, 0.9] },
-  { name: "Rosa",   hl: [1, 0.56, 0.75],    line: [0.88, 0.2, 0.5] },
+  { name: "Yellow", hl: [1, 0.85, 0],      line: [0.9, 0.68, 0] },
+  { name: "Green",   hl: [0.49, 0.85, 0.39], line: [0.18, 0.62, 0.22] },
+  { name: "Blue",    hl: [0.45, 0.75, 1],    line: [0.15, 0.45, 0.9] },
+  { name: "Pink",    hl: [1, 0.56, 0.75],    line: [0.88, 0.2, 0.5] },
   { name: "Orange", hl: [1, 0.65, 0.25],    line: [0.95, 0.45, 0.05] },
 ];
-const KIND_NAMES = { Highlight: "Hervorhebung", Underline: "Unterstreichung", StrikeOut: "Durchstreichung", Squiggly: "Markierung", Text: "Notiz", FreeText: "Textfeld" };
+const KIND_NAMES = { Highlight: "Highlight", Underline: "Underline", StrikeOut: "Strikeout", Squiggly: "Markup", Text: "Note", FreeText: "Text box" };
+const kindName = (k) => tr(KIND_NAMES[k] || "Annotation");
 const colorFor = (i, kind) => (kind === "Highlight" || kind === "Text" ? COLORS[i].hl : COLORS[i].line);
 const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
 
@@ -454,7 +460,7 @@ function buildSwatches(el, onPick) {
     const b = document.createElement("button");
     b.className = "sw";
     b.dataset.i = i;
-    b.title = `${c.name} hervorheben`;
+    b.title = tr("Highlight in {color}", { color: tr(c.name) });
     b.style.background = css(c.hl);
     b.addEventListener("click", () => onPick(i));
     el.append(b);
@@ -567,7 +573,7 @@ async function markSelection(kind, ci) {
     await api("/api/notes/create", { page: sel.page, kind, color: colorFor(ci, kind), pdfRects: rects, text: sel.text });
     await afterChange();
   } catch (e) {
-    showToast("Konnte nicht markieren: " + e.message);
+    showToast(tr("Could not highlight: {msg}", { msg: e.message }));
   }
 }
 
@@ -651,7 +657,7 @@ async function restyle(n, kind, ci) {
     hideBars();
     await afterChange();
   } catch (e) {
-    showToast("Ändern fehlgeschlagen: " + e.message);
+    showToast(tr("Change failed: {msg}", { msg: e.message }));
   }
 }
 
@@ -791,7 +797,7 @@ function buildCard(n) {
   card.dataset.id = n.id;
   card.style.setProperty("--note-color", css(n.color || COLORS[0].hl));
   const thread = n.thread || [];
-  const kind = KIND_NAMES[n.subtype] || "Anmerkung";
+  const kind = kindName(n.subtype);
   const quote = n.text ? (n.text.length > 90 ? n.text.slice(0, 90) + " …" : n.text) : "";
   // Nutzer-Nachricht, auf die Claude geantwortet hat (oder antwortet), ist eine Frage, sonst ein Kommentar
   const isQuestion = (i) => thread[i + 1] && thread[i + 1].role === "assistant";
@@ -800,45 +806,45 @@ function buildCard(n) {
   if (n.collapsed) {
     const q = thread.find((m) => m.role === "user");
     const a = [...thread].reverse().find((m) => m.role === "assistant" && m.status === "ok");
-    body += q ? `<div class="msg ${isQuestion(thread.indexOf(q)) ? "q" : "c"}">${esc(q.text)}</div>` : "";
+    body += q ? `<div class="msg ${isQuestion(thread.indexOf(q)) ? "q" : "c"}" data-label="${esc(isQuestion(thread.indexOf(q)) ? tr("Question") : tr("Comment"))}">${esc(q.text)}</div>` : "";
     body += a ? `<div class="preview">${esc(a.text.replace(/[#*$`\\]/g, "").slice(0, 300))}</div>` : "";
   } else {
     thread.forEach((m, i) => {
       if (m.role === "user") {
         const who = m.author && n.own === false ? `<span class="who">${esc(m.author)}</span>` : "";
-        const edit = m.id && !isPending(n) ? `<button class="icon edit" data-msg="${esc(m.id)}" title="Bearbeiten">✎</button>` : "";
-        body += `<div class="msg ${isQuestion(i) ? "q" : "c"}" data-msg="${esc(m.id || "")}">${edit}${who}${renderMD(m.text)}</div>`;
+        const edit = m.id && !isPending(n) ? `<button class="icon edit" data-msg="${esc(m.id)}" title="${esc(tr("Edit"))}">✎</button>` : "";
+        body += `<div class="msg ${isQuestion(i) ? "q" : "c"}" data-label="${esc(isQuestion(i) ? tr("Question") : tr("Comment"))}" data-msg="${esc(m.id || "")}">${edit}${who}${renderMD(m.text)}</div>`;
       } else if (m.status === "pending") {
         const start = Date.parse(m.time) || Date.now();
-        body += `<div class="msg pending"><span class="spinner"></span>Claude (${esc(modelLabel(m.model))}) denkt nach … <span class="elapsed" data-start="${start}"></span></div>`;
+        body += `<div class="msg pending"><span class="spinner"></span>${esc(tr("Claude ({model}) is thinking …", { model: modelLabel(m.model) }))} <span class="elapsed" data-start="${start}"></span></div>`;
       } else if (m.status === "error") {
-        body += `<div class="msg err">${esc(m.text)}<button class="btn retry">Erneut versuchen</button></div>`;
+        body += `<div class="msg err">${esc(m.text)}<button class="btn retry">${esc(tr("Try again"))}</button></div>`;
       } else {
         body += `<div class="msg a">${renderMD(m.text)}</div>`;
         const u = m.usage;
-        const tip = u ? `Eingabe ${fmtNum(u.input_tokens)} · aus Cache ${fmtNum(u.cache_read_input_tokens)} · in Cache geschrieben ${fmtNum(u.cache_creation_input_tokens)} · Ausgabe ${fmtNum(u.output_tokens)} Tokens` : "";
-        body += `<div class="meta" title="${esc(tip)}">${esc(modelLabel(m.model))}${m.mode ? ` · ${modeName(m.mode)}` : ""}${m.seconds ? ` · ${m.seconds} s` : ""}${m.unsaved ? ` · <span class="unsaved" title="Das PDF ist gerade in einem anderen Programm geöffnet. Die Antwort wird gespeichert, sobald es wieder geht.">noch nicht im PDF gespeichert</span>` : ""}</div>`;
+        const tip = u ? tr("Input {a} · from cache {b} · written to cache {c} · output {d} tokens", { a: fmtNum(u.input_tokens), b: fmtNum(u.cache_read_input_tokens), c: fmtNum(u.cache_creation_input_tokens), d: fmtNum(u.output_tokens) }) : "";
+        body += `<div class="meta" title="${esc(tip)}">${esc(modelLabel(m.model))}${m.mode ? ` · ${modeName(m.mode)}` : ""}${m.seconds ? ` · ${m.seconds} s` : ""}${m.unsaved ? ` · <span class="unsaved" title="${esc(tr("The PDF is currently open in another program. The answer will be saved as soon as possible."))}">${esc(tr("not yet saved in the PDF"))}</span>` : ""}</div>`;
       }
     });
     if (!isPending(n)) {
       const mode = S.compose?.id === n.id ? S.compose.mode : thread.some((m) => m.role === "assistant") ? "ask" : "comment";
-      const ph = mode === "ask" ? (thread.length ? "Nachfrage an Claude …" : "Deine Frage an Claude …")
-        : thread.length ? "Kommentar hinzufügen …" : n.subtype === "Text" ? "Text der Notiz …" : "Dein Kommentar …";
+      const ph = tr(mode === "ask" ? (thread.length ? "Follow-up question to Claude …" : "Your question to Claude …")
+        : thread.length ? "Add a comment …" : n.subtype === "Text" ? "Text of the note …" : "Your comment …");
       body += `<div class="composer" data-mode="${mode}">
         <textarea rows="1" placeholder="${ph}"></textarea>
-        <div class="row"><span class="hint">Strg+Enter: ${mode === "ask" ? "Claude fragen" : "speichern"}</span>
-          <button class="btn ${mode === "comment" ? "primary" : ""} save-c">Kommentieren</button>
-          <button class="btn ${mode === "ask" ? "primary" : ""} send">Claude fragen</button></div>
+        <div class="row"><span class="hint">${esc(mode === "ask" ? tr("Ctrl+Enter: ask Claude") : tr("Ctrl+Enter: save"))}</span>
+          <button class="btn ${mode === "comment" ? "primary" : ""} save-c">${esc(tr("Save comment"))}</button>
+          <button class="btn ${mode === "ask" ? "primary" : ""} send">${esc(tr("Ask Claude"))}</button></div>
       </div>`;
     }
   }
 
   card.innerHTML = `
     <div class="card-head">
-      <span class="pg">S. ${esc(pageLabel(n.page))}</span>
-      <span class="quote" title="${esc(n.text)}">${quote ? `„${esc(quote)}“` : esc(kind)}</span>
-      <button class="icon toggle" title="${n.collapsed ? "Aufklappen" : "Einklappen"}">${n.collapsed ? "▸" : "▾"}</button>
-      <button class="icon del" title="${n.subtype === "Text" ? "Notiz" : "Markierung"} samt Kommentaren löschen">×</button>
+      <span class="pg">${esc(tr("p. {n}", { n: pageLabel(n.page) }))}</span>
+      <span class="quote" title="${esc(n.text)}">${quote ? esc(tr("“{q}”", { q: quote })) : esc(kind)}</span>
+      <button class="icon toggle" title="${esc(n.collapsed ? tr("Expand") : tr("Collapse"))}">${n.collapsed ? "▸" : "▾"}</button>
+      <button class="icon del" title="${esc(n.subtype === "Text" ? tr("Delete note with comments") : tr("Delete highlight with comments"))}">×</button>
     </div>
     <div class="card-body">${body}</div>`;
 
@@ -869,7 +875,7 @@ function buildCard(n) {
         await afterChange();
       } catch (e) {
         comp.querySelectorAll("button, textarea").forEach((el) => (el.disabled = false));
-        showToast("Speichern fehlgeschlagen: " + e.message);
+        showToast(tr("Saving failed: {msg}", { msg: e.message }));
       }
     };
     comp.querySelector(".send").addEventListener("click", sendAsk);
@@ -890,8 +896,8 @@ function editMessage(card, n, msgId) {
   if (!m || !el) return;
   el.classList.add("editing");
   el.innerHTML = `<textarea rows="2" data-msg="${esc(msgId)}"></textarea>
-    <div class="row"><span class="hint">Leer speichern löscht den Kommentar</span>
-      <button class="btn cancel">Abbrechen</button><button class="btn primary save">Speichern</button></div>`;
+    <div class="row"><span class="hint">${esc(tr("Saving it empty deletes the comment"))}</span>
+      <button class="btn cancel">${esc(tr("Cancel"))}</button><button class="btn primary save">${esc(tr("Save"))}</button></div>`;
   const ta = el.querySelector("textarea");
   ta.value = m.text;
   autoGrow(ta);
@@ -904,7 +910,7 @@ function editMessage(card, n, msgId) {
       await afterChange();
     } catch (e) {
       el.querySelectorAll("button, textarea").forEach((x) => (x.disabled = false));
-      showToast("Speichern fehlgeschlagen: " + e.message);
+      showToast(tr("Saving failed: {msg}", { msg: e.message }));
     }
   };
   el.querySelector(".cancel").addEventListener("click", () => refreshCard(n));
@@ -923,16 +929,16 @@ function buildDraftCard() {
   card.style.setProperty("--note-color", css(COLORS[d.color].hl));
   const quote = d.text.length > 90 ? d.text.slice(0, 90) + " …" : d.text;
   const cfg = {
-    ask: { ph: "Deine Frage zu dieser Stelle …", btn: "Claude fragen" },
-    comment: { ph: "Dein Kommentar zu dieser Stelle …", btn: "Speichern" },
-    sticky: { ph: "Text der Notiz …", btn: "Speichern" },
+    ask: { ph: tr("Your question about this passage …"), btn: tr("Ask Claude") },
+    comment: { ph: tr("Your comment on this passage …"), btn: tr("Save") },
+    sticky: { ph: tr("Text of the note …"), btn: tr("Save") },
   }[d.mode];
   card.innerHTML = `
-    <div class="card-head"><span class="pg">S. ${esc(pageLabel(d.page))}</span><span class="quote" title="${esc(d.text)}">${quote ? `„${esc(quote)}“` : "Neue Notiz"}</span></div>
+    <div class="card-head"><span class="pg">${esc(tr("p. {n}", { n: pageLabel(d.page) }))}</span><span class="quote" title="${esc(d.text)}">${quote ? esc(tr("“{q}”", { q: quote })) : esc(tr("New note"))}</span></div>
     <div class="card-body"><div class="composer">
       <textarea rows="2" placeholder="${cfg.ph}"></textarea>
-      <div class="row"><span class="hint">Strg+Enter · Esc bricht ab</span>
-        <button class="btn cancel">Abbrechen</button><button class="btn primary send">${cfg.btn}</button></div>
+      <div class="row"><span class="hint">${esc(tr("Ctrl+Enter · Esc cancels"))}</span>
+        <button class="btn cancel">${esc(tr("Cancel"))}</button><button class="btn primary send">${esc(cfg.btn)}</button></div>
     </div></div>`;
   const ta = card.querySelector("textarea");
   const cancel = () => { S.draft = null; renderHighlights(); renderAllCards(); };
@@ -964,7 +970,7 @@ function buildDraftCard() {
       }
     } catch (e) {
       card.querySelectorAll("button, textarea").forEach((el) => (el.disabled = false));
-      showToast("Konnte die Notiz nicht anlegen: " + e.message);
+      showToast(tr("Could not create the note: {msg}", { msg: e.message }));
     }
   };
   card.querySelector(".cancel").addEventListener("click", cancel);
@@ -1064,9 +1070,9 @@ async function deleteNote(n) {
     if (S.activeId === n.id) S.activeId = null;
     if (S.compose?.id === n.id) S.compose = null;
     await afterChange();
-    showToast(`${KIND_NAMES[n.subtype] || "Notiz"} gelöscht.`, "Rückgängig", doUndo);
+    showToast(tr("{kind} deleted.", { kind: kindName(n.subtype) }), tr("Undo"), doUndo);
   } catch (e) {
-    showToast("Löschen fehlgeschlagen: " + e.message);
+    showToast(tr("Deleting failed: {msg}", { msg: e.message }));
   }
 }
 
@@ -1081,7 +1087,7 @@ async function afterChange() {
 function updateUndo() {
   const b = $("undoBtn");
   b.disabled = !S.undo;
-  b.title = S.undo ? `Rückgängig: ${S.undo} (Strg+Z)` : "Nichts rückgängig zu machen";
+  b.title = S.undo ? tr("Undo: {what} (Ctrl+Z)", { what: S.undo }) : tr("Nothing to undo");
 }
 
 async function doUndo() {
@@ -1089,7 +1095,7 @@ async function doUndo() {
   try {
     const r = await api("/api/undo");
     await afterChange();
-    showToast(`Rückgängig: ${r.undone}`);
+    showToast(tr("Undone: {what}", { what: r.undone }));
   } catch (e) {
     showToast(e.message);
     refreshNotes().catch(() => {});
@@ -1149,7 +1155,7 @@ async function ask(note, question, retry, saved = false) {
     api("/api/notes").then((d) => { S.undo = d.undo || null; S.version = d.version; updateUndo(); }).catch(() => {});
   } catch (e) {
     const last = note.thread[note.thread.length - 1];
-    Object.assign(last, { status: "error", text: "Fehler: " + e.message });
+    Object.assign(last, { status: "error", text: tr("Error: {msg}", { msg: e.message }) });
     refreshCard(note);
   }
 }
@@ -1261,7 +1267,7 @@ async function buildOutline() {
   let outline = null;
   try { outline = await S.pdf.getOutline(); } catch {}
   if (!outline || !outline.length) {
-    pane.innerHTML = `<div class="sb-empty">Dieses PDF hat kein Inhaltsverzeichnis.<br>Unter <b>Seiten</b> findest du die Miniaturansichten.</div>`;
+    pane.innerHTML = `<div class="sb-empty">${tr("This PDF has no table of contents.<br>You will find thumbnails under <b>Pages</b>.")}</div>`;
     S.sidebar.outline = "none";
     return;
   }
@@ -1280,7 +1286,7 @@ async function buildOutline() {
       tg.disabled = !hasKids;
       const a = document.createElement("a");
       a.className = "toc-link";
-      a.textContent = it.title || "(ohne Titel)";
+      a.textContent = it.title || tr("(untitled)");
       a.title = it.title || "";
       a.href = "#";
       a.addEventListener("click", async (e) => {
@@ -1395,7 +1401,7 @@ function buildNoteFilters() {
   COLORS.forEach((c, i) => {
     const b = document.createElement("button");
     b.className = "sw small";
-    b.title = `Nur ${c.name}`;
+    b.title = tr("Only {color}", { color: tr(c.name) });
     b.style.background = css(c.hl);
     b.addEventListener("click", () => {
       noteFilter.colors.has(i) ? noteFilter.colors.delete(i) : noteFilter.colors.add(i);
@@ -1424,10 +1430,12 @@ function renderSidebarNotes() {
   const list = $("sbNoteList");
   const sorted = [...S.notes].sort((a, b) => a.page - b.page || (a.rects[0]?.y || 0) - (b.rects[0]?.y || 0));
   const shown = sorted.filter(noteMatches);
-  $("sbNoteCount").textContent = shown.length === S.notes.length ? `${S.notes.length} ${S.notes.length === 1 ? "Notiz" : "Notizen"}` : `${shown.length} von ${S.notes.length}`;
+  $("sbNoteCount").textContent = shown.length === S.notes.length
+    ? (S.notes.length === 1 ? tr("1 note") : tr("{n} notes", { n: S.notes.length }))
+    : tr("{a} of {b}", { a: shown.length, b: S.notes.length });
   list.replaceChildren();
   if (!shown.length) {
-    list.innerHTML = `<div class="sb-empty">${S.notes.length ? "Keine Notizen für diesen Filter." : "Noch keine Markierungen oder Notizen."}</div>`;
+    list.innerHTML = `<div class="sb-empty">${esc(S.notes.length ? tr("No notes for this filter.") : tr("No highlights or notes yet."))}</div>`;
     return;
   }
   let lastPage = 0;
@@ -1436,7 +1444,7 @@ function renderSidebarNotes() {
       lastPage = n.page;
       const h = document.createElement("div");
       h.className = "sbn-page";
-      h.textContent = `Seite ${pageLabel(n.page)}`;
+      h.textContent = tr("Page {n}", { n: pageLabel(n.page) });
       list.append(h);
     }
     const th = n.thread || [];
@@ -1450,7 +1458,7 @@ function renderSidebarNotes() {
         ${n.text ? `<div class="sbn-q">${esc(n.text.length > 140 ? n.text.slice(0, 140) + " …" : n.text)}</div>` : ""}
         ${firstUser ? `<div class="sbn-c">${esc(firstUser.text.replace(/[#*$`\\]/g, "").slice(0, 120))}</div>` : ""}
         ${claude ? `<span class="sbn-badge">Claude</span>` : ""}
-        ${!n.text && !firstUser ? `<div class="sbn-c muted">${esc(KIND_NAMES[n.subtype] || "Anmerkung")}</div>` : ""}
+        ${!n.text && !firstUser ? `<div class="sbn-c muted">${esc(kindName(n.subtype))}</div>` : ""}
       </div>`;
     el.addEventListener("click", () => focusNote(n));
     list.append(el);
@@ -1584,7 +1592,7 @@ async function startFind(raw, dir = 1) {
   for (const p of S.pages) p.find.replaceChildren();
   const cnt = $("findCount");
   if (!q) { cnt.textContent = ""; return; }
-  cnt.textContent = "Suche …";
+  cnt.textContent = tr("Searching …");
   // ab der aktuellen Seite suchen, damit der erste Treffer nahe liegt
   const start = currentPage();
   let first = -1;
@@ -1595,9 +1603,9 @@ async function startFind(raw, dir = 1) {
     if (run !== S.find.run) return;
     findAll(t, q).forEach((_, i) => S.find.matches.push({ page: num, k: i }));
     if (first < 0 && num >= start && S.find.matches.some((m) => m.page === num)) first = S.find.matches.findIndex((m) => m.page === num);
-    if (k % 20 === 19) cnt.textContent = `Suche … ${Math.round((100 * num) / S.pages.length)} %`;
+    if (k % 20 === 19) cnt.textContent = tr("Searching … {p} %", { p: Math.round((100 * num) / S.pages.length) });
   }
-  if (!S.find.matches.length) { cnt.textContent = "Keine Treffer"; findBar.classList.add("none"); return; }
+  if (!S.find.matches.length) { cnt.textContent = tr("No matches"); findBar.classList.add("none"); return; }
   findBar.classList.remove("none");
   for (const p of S.pages) if (p.rendered) highlightFindOnPage(p);
   goToMatch(first >= 0 ? first : 0);
@@ -1612,7 +1620,7 @@ function stepFind(dir) {
 async function goToMatch(i) {
   S.find.cur = i;
   const m = S.find.matches[i];
-  $("findCount").textContent = `${i + 1} von ${S.find.matches.length}`;
+  $("findCount").textContent = tr("{a} of {b}", { a: i + 1, b: S.find.matches.length });
   const p = S.pages[m.page - 1];
   const run = S.find.run;
   // Seite in den Blick bringen und warten, bis sie samt Textebene gezeichnet ist
@@ -1672,5 +1680,5 @@ function highlightFindOnPage(p) {
 
 init().catch((e) => {
   console.error(e);
-  showBanner(e.notFound ? `Dokument nicht gefunden. Zurück zur Bibliothek, um es neu zu verknüpfen.` : "Fehler beim Laden: " + e.message);
+  showBanner(e.notFound ? tr("Document not found. Go back to the library to relink it.") : tr("Error while loading: {msg}", { msg: e.message }));
 });

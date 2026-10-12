@@ -34,10 +34,10 @@ impl Ctx {
     }
 
     pub fn get_doc(self: &Arc<Self>, id: &str) -> Result<Arc<Doc>, ApiError> {
-        let entry = self.lib.get(id).ok_or_else(|| ApiError::NotFound("Dokument nicht in der Bibliothek".into()))?;
+        let entry = self.lib.get(id).ok_or_else(|| ApiError::NotFound(crate::i18n::tx("Document not in the library", "Dokument nicht in der Bibliothek")))?;
         let path = Path::new(&entry.path).to_path_buf();
         if !path.is_file() {
-            return Err(ApiError::NotFound(format!("Datei nicht gefunden: {}", path.display())));
+            return Err(ApiError::NotFound(crate::i18n::tx(&format!("File not found: {}", path.display()), &format!("Datei nicht gefunden: {}", path.display()))));
         }
         {
             let docs = self.docs.lock().unwrap();

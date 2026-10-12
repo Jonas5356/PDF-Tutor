@@ -2,7 +2,8 @@
   "bundle": {
     "resources": {
       "resources/hinweise.vorlage.txt": "hinweise.vorlage.txt",
-      "resources/pdfium.dll": "pdfium.dll"
+      "resources/pdfium.dll": "pdfium.dll",
+      "resources/hints.template.txt": "hints.template.txt"
     }
   }
 }

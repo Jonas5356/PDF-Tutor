@@ -4,6 +4,7 @@
 //! Schreiben: inkrementell (Änderungen werden ans Dateiende angehängt, der bisherige
 //! Inhalt bleibt Byte für Byte erhalten), wie es auch Acrobat macht.
 
+use crate::i18n::tx;
 use crate::util::{pdf_date, pdf_date_to_iso};
 use lopdf::{decode_text_string, dictionary, text_string, Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream};
 use serde_json::{json, Value};
@@ -324,10 +325,10 @@ pub fn norm_to_pdf(b: [f32; 4], rot: i64, x: f32, y: f32) -> (f32, f32) {
 // Schreiben
 
 pub fn load(bytes: &[u8]) -> Result<Document, String> {
-    let doc = Document::load_mem(bytes).map_err(|e| format!("PDF konnte nicht gelesen werden: {e}"))?;
+    let doc = Document::load_mem(bytes).map_err(|e| tx(&format!("The PDF could not be read: {e}"), &format!("PDF konnte nicht gelesen werden: {e}")))?;
     if doc.is_encrypted() {
         return Document::load_mem_with_options(bytes, lopdf::LoadOptions::with_password("")).map_err(|_| {
-            "Dieses PDF ist mit einem Passwort geschützt; Kommentare können nicht gespeichert werden.".to_string()
+            tx("This PDF is password-protected; comments cannot be saved.", "Dieses PDF ist mit einem Passwort geschützt; Kommentare können nicht gespeichert werden.")
         });
     }
     Ok(doc)
@@ -503,7 +504,7 @@ impl Editor {
     }
 
     pub fn page_id(&self, page_no: u32) -> Result<ObjectId, String> {
-        self.doc().get_pages().get(&page_no).copied().ok_or_else(|| format!("Seite {page_no} nicht gefunden"))
+        self.doc().get_pages().get(&page_no).copied().ok_or_else(|| tx(&format!("Page {page_no} not found"), &format!("Seite {page_no} nicht gefunden")))
     }
 
     fn annots_edit(&mut self, page_id: ObjectId, f: impl FnOnce(&mut Vec<Object>)) -> Result<(), String> {
@@ -544,7 +545,7 @@ impl Editor {
         meta: &Value,
     ) -> Result<ObjectId, String> {
         if rects.is_empty() {
-            return Err("Keine Markierung übergeben".into());
+            return Err(tx("No highlight given", "Keine Markierung übergeben"));
         }
         if kind == Kind::Note {
             return Err("Falsche Art".into());
@@ -628,14 +629,14 @@ impl Editor {
         let current = Kind::from_name(&root.subtype);
         let is_note = matches!(current, Some(Kind::Note)) || root.subtype == "FreeText";
         if root.subtype == "FreeText" {
-            return Err("Diese Art von Notiz kann hier nicht geändert werden.".into());
+            return Err(tx("This kind of note cannot be changed here.", "Diese Art von Notiz kann hier nicht geändert werden."));
         }
         let Some(current) = current else {
-            return Err("Diese Art von Markierung kann hier nicht geändert werden.".into());
+            return Err(tx("This kind of highlight cannot be changed here.", "Diese Art von Markierung kann hier nicht geändert werden."));
         };
         let kind = kind.unwrap_or(current);
         if is_note != (kind == Kind::Note) {
-            return Err("Eine Haftnotiz kann nicht in eine Markierung umgewandelt werden.".into());
+            return Err(tx("A sticky note cannot be turned into a highlight.", "Eine Haftnotiz kann nicht in eine Markierung umgewandelt werden."));
         }
         let color = color.unwrap_or(root.color);
         let page_id = self.page_id(root.page)?;
@@ -764,9 +765,9 @@ impl Editor {
 
     pub fn finish(mut self) -> Result<Vec<u8>, String> {
         let mut out = Vec::with_capacity(self.prev_len + 8192);
-        self.inc.save_to(&mut out).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))?;
+        self.inc.save_to(&mut out).map_err(|e| tx(&format!("Saving failed: {e}"), &format!("Speichern fehlgeschlagen: {e}")))?;
         if out.len() < self.prev_len || out[..self.prev_len] != self.inc.get_prev_documents_bytes()[..] {
-            return Err("Interner Fehler: der bisherige Dateiinhalt wäre verändert worden".into());
+            return Err(tx("Internal error: the existing file content would have been changed", "Interner Fehler: der bisherige Dateiinhalt wäre verändert worden"));
         }
         Ok(out)
     }

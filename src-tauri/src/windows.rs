@@ -21,7 +21,7 @@ fn valid(url: &str) -> bool {
 
 pub fn open(app: &AppHandle, url: &str) -> Result<(), String> {
     if !valid(url) {
-        return Err("ungültige Adresse".into());
+        return Err("invalid address".into());
     }
     let url = if url.is_empty() { "index.html" } else { url };
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);

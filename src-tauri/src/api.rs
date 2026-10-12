@@ -1,6 +1,7 @@
 //! Schnittstelle für die Oberfläche: ein Befehl `api(path, body)` mit denselben Pfaden
 //! wie in Version 3, damit die Oberfläche weitgehend gleich bleiben konnte.
 
+use crate::i18n::tx;
 use crate::annots::Kind;
 use crate::claude;
 use crate::state::{ApiError, Ctx};
@@ -42,7 +43,7 @@ pub async fn api(app: AppHandle, window: WebviewWindow, path: String, body: Opti
         let app2 = app.clone();
         tauri::async_runtime::spawn_blocking(move || dispatch(&app2, &window, &ctx, &path, &body))
             .await
-            .unwrap_or_else(|e| Err(bad(format!("Interner Fehler: {e}"))))
+            .unwrap_or_else(|e| Err(bad(tx(&format!("Internal error: {e}"), &format!("Interner Fehler: {e}")))))
     };
     res.map_err(|e| match e {
         ApiError::NotFound(m) => json!({"error": m, "notFound": true}),
@@ -53,8 +54,8 @@ pub async fn api(app: AppHandle, window: WebviewWindow, path: String, body: Opti
 fn pick_pdf(app: &AppHandle) -> Option<PathBuf> {
     app.dialog()
         .file()
-        .set_title("Dokument öffnen")
-        .add_filter("PDF-Dateien", &["pdf"])
+        .set_title(tx("Open document", "Dokument öffnen"))
+        .add_filter(tx("PDF files", "PDF-Dateien"), &["pdf"])
         .blocking_pick_file()
         .and_then(|f| f.into_path().ok())
 }
@@ -63,7 +64,7 @@ fn pick_pdf(app: &AppHandle) -> Option<PathBuf> {
 fn clean_name(name: &str) -> String {
     let n: String = name.chars().map(|c| if "\\/:*?\"<>|".contains(c) || c.is_control() { ' ' } else { c }).collect();
     let n = n.trim().trim_end_matches('.').to_string();
-    if n.is_empty() { "Lernzettel".into() } else { n }
+    if n.is_empty() { "PDF-Tutor".into() } else { n }
 }
 
 /// „Speichern unter“-Dialog. Für automatische Tests lässt er sich mit PDFTUTOR_TEST_SAVE_DIR umgehen.
@@ -71,7 +72,7 @@ pub fn pick_save(app: &AppHandle, label: &str, ext: &str, name: &str, dir: Optio
     if let Ok(d) = std::env::var("PDFTUTOR_TEST_SAVE_DIR") {
         return Some(PathBuf::from(d).join(clean_name(name)));
     }
-    let mut dlg = app.dialog().file().set_title("Speichern unter").add_filter(label, &[ext]).set_file_name(clean_name(name));
+    let mut dlg = app.dialog().file().set_title(tx("Save as", "Speichern unter")).add_filter(label, &[ext]).set_file_name(clean_name(name));
     if let Some(dir) = dir.filter(|d| d.is_dir()) {
         dlg = dlg.set_directory(dir);
     }
@@ -79,13 +80,13 @@ pub fn pick_save(app: &AppHandle, label: &str, ext: &str, name: &str, dir: Optio
 }
 
 fn pick_folder(app: &AppHandle) -> Option<PathBuf> {
-    app.dialog().file().set_title("Bibliotheksordner wählen").blocking_pick_folder().and_then(|f| f.into_path().ok())
+    app.dialog().file().set_title(tx("Choose library folder", "Bibliotheksordner wählen")).blocking_pick_folder().and_then(|f| f.into_path().ok())
 }
 
 fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str, body: &Value) -> Result<Value, ApiError> {
     // --- Dokumentbezogen: /api/doc/<id>/<aktion>
     if let Some(rest) = path.strip_prefix("/api/doc/") {
-        let (id, action) = rest.split_once('/').ok_or_else(|| bad("ungültige Adresse"))?;
+        let (id, action) = rest.split_once('/').ok_or_else(|| bad(tx("invalid address", "ungültige Adresse")))?;
         let doc = ctx.get_doc(id)?;
         return match action {
             "info" => {
@@ -103,10 +104,10 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             "status" => Ok(doc.status(ctx)),
             "notes" => Ok(doc.notes_json(ctx)?),
             "notes/create" => {
-                let page = body["page"].as_u64().ok_or_else(|| bad("Seite fehlt"))? as u32;
+                let page = body["page"].as_u64().ok_or_else(|| bad(tx("page missing", "Seite fehlt")))? as u32;
                 let rects: Vec<[f32; 4]> = body["pdfRects"]
                     .as_array()
-                    .ok_or_else(|| bad("Markierung fehlt"))?
+                    .ok_or_else(|| bad(tx("highlight missing", "Markierung fehlt")))?
                     .iter()
                     .filter_map(|r| {
                         let a = r.as_array()?;
@@ -124,8 +125,8 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 Ok(doc.create_note(ctx, page, kind, rects, color, s(body, "text"), s(body, "comment"), s(body, "question"))?)
             }
             "notes/sticky" => {
-                let page = body["page"].as_u64().ok_or_else(|| bad("Seite fehlt"))? as u32;
-                let p = body["point"].as_array().filter(|a| a.len() == 2).ok_or_else(|| bad("Position fehlt"))?;
+                let page = body["page"].as_u64().ok_or_else(|| bad(tx("page missing", "Seite fehlt")))? as u32;
+                let p = body["point"].as_array().filter(|a| a.len() == 2).ok_or_else(|| bad(tx("position missing", "Position fehlt")))?;
                 let at = (p[0].as_f64().unwrap_or(0.0) as f32, p[1].as_f64().unwrap_or(0.0) as f32);
                 Ok(doc.create_sticky(ctx, page, at, color_of(body).unwrap_or(DEFAULT_COLOR), s(body, "text"))?)
             }
@@ -195,6 +196,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             "claudeFound": claude::find_claude().is_some(),
             "dataDir": ctx.paths.data.to_string_lossy(),
             "updaterConfigured": updater_configured(app),
+            "lang": crate::i18n::lang(),
         })),
         "/api/library" => Ok(ctx.lib.listing()),
         "/api/library/open" => {
@@ -204,7 +206,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             };
             let Some(p) = p else { return Ok(json!({"cancelled": true})) };
             if !p.is_file() {
-                return Err(bad(format!("Datei nicht gefunden: {}", p.display())));
+                return Err(bad(tx(&format!("File not found: {}", p.display()), &format!("Datei nicht gefunden: {}", p.display()))));
             }
             Ok(json!({"id": ctx.lib.ensure(&p)}))
         }
@@ -238,6 +240,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 "volltextGrenze": st.volltext_grenze_tokens,
                 "autor": st.autor, "autorStandard": st.author(),
                 "sicherheitskopie": st.sicherheitskopie,
+                "sprache": crate::i18n::lang(),
                 "dataDir": ctx.paths.data.to_string_lossy(), "logFile": ctx.paths.log.to_string_lossy(),
             }))
         }
@@ -255,8 +258,20 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             if let Some(b) = body["sicherheitskopie"].as_bool() {
                 st.sicherheitskopie = b;
             }
+            let mut lang_changed = false;
+            if let Some(l) = body["sprache"].as_str().and_then(crate::i18n::normalize) {
+                lang_changed = l != crate::i18n::lang();
+                crate::i18n::set(&l);
+                st.sprache = Some(l);
+            }
             st.save(&ctx.paths.settings).map_err(|e| bad(e.to_string()))?;
-            Ok(json!({"ok": true}))
+            if lang_changed {
+                // alle Fenster in der neuen Sprache neu laden
+                for (_, w) in app.webview_windows() {
+                    let _ = w.eval("setTimeout(() => location.reload(), 50)");
+                }
+            }
+            Ok(json!({"ok": true, "reload": lang_changed}))
         }
         "/api/open-path" => {
             let target: PathBuf = match s(body, "what") {
@@ -265,7 +280,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 "folder" => {
                     let p = PathBuf::from(s(body, "path"));
                     if !p.is_dir() {
-                        return Err(bad("kein Ordner"));
+                        return Err(bad(tx("not a folder", "kein Ordner")));
                     }
                     p
                 }
@@ -274,14 +289,14 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                     let p = PathBuf::from(s(body, "path"));
                     let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
                     if !p.is_file() || !["html", "md", "pdf"].contains(&ext.as_str()) {
-                        return Err(bad("Diese Datei kann nicht geöffnet werden."));
+                        return Err(bad(tx("This file cannot be opened.", "Diese Datei kann nicht geöffnet werden.")));
                     }
                     p
                 }
-                _ => return Err(bad("unbekannt")),
+                _ => return Err(bad(tx("unknown", "unbekannt"))),
             };
             if !target.exists() {
-                return Err(bad("nicht vorhanden"));
+                return Err(bad(tx("does not exist", "nicht vorhanden")));
             }
             app.opener().open_path(target.to_string_lossy(), None::<&str>).map_err(|e| bad(e.to_string()))?;
             Ok(json!({"ok": true}))
@@ -301,8 +316,8 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 None => app
                     .dialog()
                     .file()
-                    .set_title("PDFs hinzufügen")
-                    .add_filter("PDF-Dateien", &["pdf"])
+                    .set_title(tx("Add PDFs", "PDFs hinzufügen"))
+                    .add_filter(tx("PDF files", "PDF-Dateien"), &["pdf"])
                     .blocking_pick_files()
                     .map(|v| v.into_iter().filter_map(|f| f.into_path().ok()).collect())
                     .unwrap_or_default(),
@@ -320,7 +335,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             let ids: Vec<String> = body["sources"].as_array().ok_or_else(|| bad("Quellen fehlen"))?.iter().filter_map(|x| x.as_str().map(String::from)).collect();
             let mut src_paths = vec![];
             for id in &ids {
-                let e = ctx.lib.get(id).ok_or_else(|| bad("Ein Quelldokument ist nicht mehr in der Bibliothek."))?;
+                let e = ctx.lib.get(id).ok_or_else(|| bad(tx("A source document is no longer in the library.", "Ein Quelldokument ist nicht mehr in der Bibliothek.")))?;
                 src_paths.push(PathBuf::from(e.path));
             }
             let spec: Vec<crate::pdfium_host::PageSpec> = body["pages"]
@@ -334,10 +349,10 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
                 })
                 .collect();
             if spec.iter().any(|p| p.src >= src_paths.len()) {
-                return Err(bad("ungültige Seitenangabe"));
+                return Err(bad(tx("invalid page", "ungültige Seitenangabe")));
             }
             let dir = src_paths.first().and_then(|p| p.parent().map(|d| d.to_path_buf()));
-            let Some(mut path) = pick_save(app, "PDF-Dokument", "pdf", s(body, "name"), dir) else {
+            let Some(mut path) = pick_save(app, &tx("PDF document", "PDF-Dokument"), "pdf", s(body, "name"), dir) else {
                 return Ok(json!({"cancelled": true}));
             };
             if path.extension().map(|e| e.to_string_lossy().to_lowercase()) != Some("pdf".into()) {
@@ -345,31 +360,31 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             }
             let target = crate::util::norm_path(&std::path::absolute(&path).unwrap_or(path.clone()));
             if src_paths.iter().any(|p| crate::util::norm_path(&std::path::absolute(p).unwrap_or(p.clone())) == target) {
-                return Err(bad("Bitte einen neuen Dateinamen wählen: Die Originaldatei wird nicht überschrieben."));
+                return Err(bad(tx("Please choose a new file name: the original file is not overwritten.", "Bitte einen neuen Dateinamen wählen: Die Originaldatei wird nicht überschrieben.")));
             }
             let sources: Vec<Vec<u8>> = src_paths
                 .iter()
-                .map(|p| std::fs::read(p).map_err(|e| bad(format!("{} kann nicht gelesen werden: {e}", p.display()))))
+                .map(|p| std::fs::read(p).map_err(|e| bad(tx(&format!("{} cannot be read: {e}", p.display()), &format!("{} kann nicht gelesen werden: {e}", p.display())))))
                 .collect::<Result<_, _>>()?;
             let out = crate::pdfium_host::assemble(&sources, &spec).map_err(bad)?;
-            write_atomic(&path, &out).map_err(|e| bad(format!("Speichern fehlgeschlagen: {e}")))?;
+            write_atomic(&path, &out).map_err(|e| bad(tx(&format!("Saving failed: {e}"), &format!("Speichern fehlgeschlagen: {e}"))))?;
             let id = ctx.lib.ensure(&path);
             Ok(json!({"path": path.to_string_lossy(), "id": id, "pages": spec.len()}))
         }
         "/api/save-file" => {
             let (label, ext) = match s(body, "kind") {
-                "html" => ("HTML-Datei", "html"),
-                "md" => ("Markdown", "md"),
-                _ => return Err(bad("unbekanntes Format")),
+                "html" => (tx("HTML file", "HTML-Datei"), "html"),
+                "md" => ("Markdown".to_string(), "md"),
+                _ => return Err(bad(tx("unknown format", "unbekanntes Format"))),
             };
             let dir = ctx.lib.get(s(body, "docId")).and_then(|e| PathBuf::from(e.path).parent().map(|p| p.to_path_buf()));
-            let Some(mut path) = pick_save(app, label, ext, s(body, "name"), dir) else {
+            let Some(mut path) = pick_save(app, &label, ext, s(body, "name"), dir) else {
                 return Ok(json!({"cancelled": true}));
             };
             if path.extension().map(|e| e.to_string_lossy().to_lowercase()) != Some(ext.to_string()) {
                 path.set_extension(ext);
             }
-            write_atomic(&path, s(body, "content").as_bytes()).map_err(|e| bad(format!("Speichern fehlgeschlagen: {e}")))?;
+            write_atomic(&path, s(body, "content").as_bytes()).map_err(|e| bad(tx(&format!("Saving failed: {e}"), &format!("Speichern fehlgeschlagen: {e}"))))?;
             Ok(json!({"path": path.to_string_lossy()}))
         }
         "/api/window/open" => {
@@ -380,7 +395,7 @@ fn dispatch(app: &AppHandle, window: &WebviewWindow, ctx: &Arc<Ctx>, path: &str,
             let _ = window.set_title(s(body, "title"));
             Ok(json!({"ok": true}))
         }
-        _ => Err(ApiError::NotFound(format!("unbekannt: {path}"))),
+        _ => Err(ApiError::NotFound(format!("unknown: {path}"))),
     }
 }
 
@@ -421,19 +436,19 @@ pub fn protocol(ctx: &Arc<Ctx>, path: &str) -> Result<(Vec<u8>, &'static str), (
     let parts: Vec<&str> = path.split('/').collect();
     match parts.as_slice() {
         ["doc", id, "pdf"] => {
-            let e = ctx.lib.get(id).ok_or((404, "unbekannt".to_string()))?;
+            let e = ctx.lib.get(id).ok_or((404, "unknown".to_string()))?;
             let data = std::fs::read(&e.path).map_err(|e| (404, e.to_string()))?;
             Ok((data, "application/pdf"))
         }
         ["thumb", id] => thumbnail(ctx, id).map(|d| (d, "image/jpeg")),
-        _ => Err((404, "nicht gefunden".into())),
+        _ => Err((404, "not found".into())),
     }
 }
 
 fn thumbnail(ctx: &Arc<Ctx>, id: &str) -> Result<Vec<u8>, (u16, String)> {
-    let e = ctx.lib.get(id).ok_or((404, "unbekannt".to_string()))?;
+    let e = ctx.lib.get(id).ok_or((404, "unknown".to_string()))?;
     let pdf = Path::new(&e.path);
-    let meta = std::fs::metadata(pdf).map_err(|_| (404, "Datei fehlt".to_string()))?;
+    let meta = std::fs::metadata(pdf).map_err(|_| (404, "file missing".to_string()))?;
     let mtime = meta
         .modified()
         .ok()
@@ -445,7 +460,7 @@ fn thumbnail(ctx: &Arc<Ctx>, id: &str) -> Result<Vec<u8>, (u16, String)> {
         return Ok(d);
     }
     if crate::util::is_cloud_only(pdf) {
-        return Err((404, "Datei liegt nur in der Cloud".into()));
+        return Err((404, "file is cloud-only".into()));
     }
     for old in std::fs::read_dir(&ctx.paths.thumbs).into_iter().flatten().flatten() {
         if old.file_name().to_string_lossy().starts_with(&format!("{id}_")) {

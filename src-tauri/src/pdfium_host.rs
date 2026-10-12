@@ -12,7 +12,7 @@ static LOCK: Mutex<()> = Mutex::new(());
 
 pub fn init(dirs: &[PathBuf]) {
     PDFIUM.get_or_init(|| {
-        let mut last = String::from("keine Bibliothek gefunden");
+        let mut last = String::from("no library found");
         for d in dirs {
             let lib = Pdfium::pdfium_platform_library_name_at_path(d);
             if !lib.exists() {
@@ -28,7 +28,7 @@ pub fn init(dirs: &[PathBuf]) {
         }
         match Pdfium::bind_to_system_library() {
             Ok(b) => Ok(Pdfium::new(b)),
-            Err(_) => Err(format!("PDFium konnte nicht geladen werden ({last})")),
+            Err(_) => Err(format!("PDFium could not be loaded ({last})")),
         }
     });
 }
@@ -38,7 +38,7 @@ fn with<R>(f: impl FnOnce(&Pdfium) -> Result<R, String>) -> Result<R, String> {
     match PDFIUM.get() {
         Some(Ok(p)) => f(p),
         Some(Err(e)) => Err(e.clone()),
-        None => Err("PDFium nicht initialisiert".into()),
+        None => Err("PDFium not initialized".into()),
     }
 }
 
@@ -262,18 +262,18 @@ fn rot_to_deg(r: PdfPageRenderRotation) -> i32 {
 /// Kommentare auf den Seiten werden mitkopiert; die Quelldateien bleiben unverändert.
 pub fn assemble(sources: &[Vec<u8>], spec: &[PageSpec]) -> Result<Vec<u8>, String> {
     if spec.is_empty() {
-        return Err("Das neue Dokument hätte keine Seiten.".into());
+        return Err(crate::i18n::tx("The new document would have no pages.", "Das neue Dokument hätte keine Seiten."));
     }
     with(|p| {
         let docs: Vec<PdfDocument> = sources
             .iter()
-            .map(|b| p.load_pdf_from_byte_slice(b, None).map_err(|e| format!("Ein PDF konnte nicht gelesen werden: {e:?}")))
+            .map(|b| p.load_pdf_from_byte_slice(b, None).map_err(|e| crate::i18n::tx(&format!("A PDF could not be read: {e:?}"), &format!("Ein PDF konnte nicht gelesen werden: {e:?}"))))
             .collect::<Result<_, _>>()?;
         let mut out = p.create_new_pdf().map_err(err)?;
         for (i, s) in spec.iter().enumerate() {
-            let src = docs.get(s.src).ok_or("unbekanntes Quelldokument")?;
+            let src = docs.get(s.src).ok_or("unknown source document")?;
             if s.page as usize >= src.pages().len() as usize {
-                return Err(format!("Seite {} gibt es im Quelldokument nicht.", s.page + 1));
+                return Err(crate::i18n::tx(&format!("Page {} does not exist in the source document.", s.page + 1), &format!("Seite {} gibt es im Quelldokument nicht.", s.page + 1)));
             }
             out.pages_mut().copy_page_from_document(src, s.page as PdfPageIndex, i as PdfPageIndex).map_err(err)?;
             if s.rotate.rem_euclid(360) != 0 {
